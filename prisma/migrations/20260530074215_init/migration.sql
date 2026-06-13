@@ -1,0 +1,21 @@
+-- CreateTable
+CREATE TABLE `Golfer` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(191) NOT NULL,
+    `handicap` INTEGER NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `Score` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `tournamentId` INTEGER NOT NULL,
+    `golferName` VARCHAR(191) NOT NULL,
+    `holeNo` INTEGER NOT NULL,
+    `strokes` INTEGER NOT NULL,
+    `recordedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

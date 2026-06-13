@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  td-mysql:
+    image: mysql:8.0
+    container_name: td-golf-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: golf_root_password
+      MYSQL_DATABASE: tournament_director_db
+      MYSQL_USER: td_user
+      MYSQL_PASSWORD: golf_user_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql-data:/var/lib/mysql

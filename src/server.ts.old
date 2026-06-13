@@ -1,0 +1,67 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import { prisma } from './prisma.js'; // นามสกุล .js ตามระเบียบ ES Module ยุคใหม่ 
+
+// ปลุกพลังให้ Node.js อ่านค่าจากไฟล์ .env เข้าไปในระบบ
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || ""; // ใช้พอร์ตจาก .env หรือดีฟอลต์เป็น 8500 แต่ลองแก้ดีฟอลต์เป็น "" 
+
+app.use(express.json());
+
+// 1. เส้นทางทดสอบระบบหน้าด่าน (ตรวจสุขภาพเซิร์ฟเวอร์)
+app.get('/', (req, res) => {
+  res.json({ message: "สวัสดีครับป๋า! ระบบ Tournament Director API พร้อมทำงานข้ามมิติแล้วครับ ⛳" });
+});
+
+// 2. [POST] API สำหรับฉีดข้อมูลจำลอง (Mock Data) สนามกอล์ฟบางพระเข้าฐานข้อมูล
+app.post('/api/mock-golf-course', async (req, res) => {
+  try {
+    // สมมติโครงสร้างตาราง GolfCourse ของป๋า (ปรับเปลี่ยนชื่อฟีลด์ตาม schema.prisma จริงของป๋าได้เลยครับ)
+    const newCourse = await prisma.course.create({
+      data: {
+        course_name: "Bangpra International Golf Club",
+        location: "ชลบุรี",
+        totalHoles: 18,
+        // ถ้า schema มีความสัมพันธ์หรือฟีลด์อื่น เช่น พาร์แต่ละหลุม ป๋าสามารถยัดเพิ่มตรงนี้ได้ครับ
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "ฉีดข้อมูลสนามกอล์ฟบางพระข้ามมิติสำเร็จ!",
+      data: newCourse
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 3. [GET] API สำหรับดึงรายชื่อสนามกอล์ฟทั้งหมดจากเครื่อง pp1 ที่บ้านมาแสดงผล
+app.get('/api/golf-courses', async (req, res) => {
+  try {
+    const courses = await prisma.course.findMany();
+    res.json({
+      success: true,
+      count: courses.length,
+      data: courses
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// เปิดประตูบานแรกให้เซิร์ฟเวอร์ตื่นทำงาน
+app.listen(PORT, () => {
+  console.log(`🚀 ============================================`);
+  console.log(`🎯 Server is Listening on Port ${PORT}`);
+  console.log(`🔗 Test GET: http://localhost:${PORT}/api/golf-courses`);
+  console.log(`🚀 ============================================`);
+});

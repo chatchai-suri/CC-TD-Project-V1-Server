@@ -1,0 +1,112 @@
+datasource db {
+  provider = "mysql"
+}
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. ตารางผู้ใช้งานระบบ (รองรับโลจิกอายุ)
+model User {
+  user_id       Int            @id @default(autoincrement())
+  username      String?        @unique
+  password      String?
+  fullname      String
+  nickname      String?
+  phone_number  String?
+  age           Int?           // 👈 หยอดฟิลด์อายุประจำตัวนักกอล์ฟ (เผื่อดึงไปคำนวณ Modified-Peoria)
+  global_role   String         @default("golfer")
+  created_at    DateTime       @default(now())
+  
+  // Relations
+  flights_joined FlightMember[]
+}
+
+// 2. ตารางสนามกอล์ฟ
+model Course {
+  course_id   Int          @id @default(autoincrement())
+  course_name String
+  location    String?
+  created_at  DateTime     @default(now())
+  
+  // Relations
+  sections    Section[]
+  tournaments Tournament[]
+}
+
+// 3. ตารางฝั่งของสนาม (เช่น คอร์สภูเขา คอร์สทะเลสาบ มักมีฝั่งละ 9 หลุม)
+model Section {
+  section_id   Int      @id @default(autoincrement())
+  course_id    Int
+  section_name String   // เช่น "Mountain", "Ocean"
+  
+  // Relations
+  course       Course   @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  holes        Hole[]
+}
+
+// 4. ตารางข้อมูลพาร์และอินเด็กซ์ประจำหลุม (1 สนามมี 18 หลุมหลัก)
+model Hole {
+  hole_id    Int     @id @default(autoincrement())
+  section_id Int
+  hole_no    Int     // หลุมที่ 1-9 ของเซกชันนั้น
+  par        Int     // ค่าพาร์ (3, 4, 5)
+  index      Int?    // ความยากง่ายของหลุม (1-18)
+  
+  // Relations
+  section    Section @relation(fields: [section_id], references: [section_id], onDelete: Cascade)
+}
+
+// 5. ตารางแมตช์การแข่งขัน (ประกาศเงื่อนไขการใช้สูตรคำนวณอายุ)
+model Tournament {
+  tournament_id   Int      @id @default(autoincrement())
+  tournament_name String
+  tournament_mode String   @default("Stroke Play")
+  use_age_option  Boolean  @default(false) // 👈 หยอดทางเลือก: true = ใช้สูตรอายุ, false = N/A ไม่ใช้
+  course_id       Int
+  event_date      DateTime @db.Date
+  status          String   @default("setup") // "setup", "live", "completed"
+  
+  // Relations
+  course          Course   @relation(fields: [course_id], references: [course_id], onDelete: Restrict)
+  flights         Flight[]
+}
+
+// 6. ตารางกลุ่มก๊วนทีออฟ (Flight)
+model Flight {
+  flight_id     Int            @id @default(autoincrement())
+  tournament_id Int
+  flight_name   String         // เช่น "A1", "B3"
+  t_off_time    String?        // เวลาออกรอบ เช่น "07:30"
+  
+  // Relations
+  tournament    Tournament     @relation(fields: [tournament_id], references: [tournament_id], onDelete: Cascade)
+  members       FlightMember[]
+  scores        Score[]
+}
+
+// 7. ตารางจับคู่นักกอล์ฟลงก๊วน (Flight Member)
+model FlightMember {
+  flight_member_id Int    @id @default(autoincrement())
+  flight_id        Int
+  user_id          Int
+  handicap_claim   Int?   // แฮนดิแคปที่ผู้เล่นแจ้งตอนสมัคร
+  
+  // Relations
+  flight           Flight @relation(fields: [flight_id], references: [flight_id], onDelete: Cascade)
+  user             User   @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  
+  @@unique([flight_id, user_id]) // ป้องกันนักกอล์ฟคนเดิมลงซ้ำก๊วนเดียวกัน
+}
+
+// 8. ตารางบันทึกคะแนนดิบรายหลุมในสนามกอล์ฟ
+model Score {
+  score_id    Int      @id @default(autoincrement())
+  flight_id   Int
+  user_id     Int
+  hole_no     Int      // หลุมที่ 1 - 18 จริงของแมตช์นั้น
+  strokes     Int      // จำนวนไม้ที่ตีได้จริงในหลุมนั้น
+  recorded_at DateTime @default(now())
+  
+  // Relations
+  flight      Flight   @relation(fields: [flight_id], references: [flight_id], onDelete: Cascade)
+}
