@@ -17,10 +17,14 @@ const errorMiddleware = (err: any, req: Request, res: Response, next: NextFuncti
     return;
   }
 
-  // 🎯 ดักจับกรณีเอเรอร์ทั่วไปของเซิร์ฟเวอร์ Express 5
-  res.status(err.status || 500).json({
+  // 🎯 2. ดักจับเอเรอร์จากระบบคู่แฝด createError.ts หรือเอเรอร์ทั่วไปของเซิร์ฟเวอร์ Express 5
+  // แก้ไข: เปลี่ยนจาก err.status เป็น err.statusCode ให้ตรงตามข้อตกลงจักรวาลพิมพ์เขียวแล้วครับป๋า!
+  const statusCode = err.statusCode || 500; 
+  
+  res.status(statusCode).json({
     success: false,
-    message: err.message || 'Something went wrong'
+    message: err.message || 'Something went wrong',
+    errors: err.errors || null
   });
 };
 
