@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../../prisma.js'; //
 import createError from '../../utils/createError.js'; // ดึงคัมภีร์ตัวกลางมาใช้งาน (.js เสมอตามระเบียบ)
 
-export const addGolfer = async (req: Request, res: Response) => {
+export const registerUser = async (req: Request, res: Response) => {
   const { username, password, confirmPassword } = req.body;
 
   // 🎯 ตรวจสอบสิทธิ์ด่านแรก: ถ้ารหัสไม่ตรงกัน สั่งโยนก้อน Error ด้วยบรรทัดเดียวสั้น ๆ ได้เลยครับป๋า
@@ -50,7 +50,7 @@ export const login = async (req: Request, res: Response) => {
   // 3. ผ่านฉลุย ส่งข้อมูลความสำเร็จกลับไปให้หน้าบ้าน
   res.status(200).json({
     success: true,
-    message: `ยินดีต้อนรับกลับสู่สนามครับ ป๋าได้รับการจัดสิทธิ์ให้เป็น [${user.global_role}] ⛳`,
+    message: `ยินดีต้อนรับกลับสู่สนามครับ ป๋าได้สิทธิ์ในฐานะ [${user.global_role}] ⛳`,
     data: {
       user_id: user.user_id,
       username: user.username,
