@@ -64,3 +64,11 @@ export const registerSomething = async (req: Request, res: Response) => {
   // ============================================================
   res.status(201).json({ success: true, message: "สำเร็จ", data: result });
 };
+
+### ⏰ 5.1 มาตรฐานการบันทึกแสตมป์เวลา (Audit Trail Standard)
+เพื่อสัจจะแห่งข้อมูลและการทวนสอบ (Audit Trail) ในระบบเกรด Enterprise:
+1. ทุกตารางข้อมูล (ทุกโมเดล) ในโปรเจกต์นี้ จะต้องมีฟีลด์กำกับเวลาสร้างและเวลาแก้ไขล่าสุดเสมอ
+2. ในช่วงเฟสพึ่งตั้งไข่ เพื่อป้องกันบั๊กข้อมูลเก่าค้างแคชชนกับคอลัมน์ใหม่ (Prisma Migration Constraint) ให้ใช้ Syntax มาตรฐานดังนี้พ่วงท้ายในทุกโมเดล:
+   * `created_at DateTime @default(now())`
+   * `updated_at DateTime @default(now()) @updatedAt`
+

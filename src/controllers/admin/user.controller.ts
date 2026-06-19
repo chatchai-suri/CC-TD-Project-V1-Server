@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../../prisma.js'; //
 import createError from '../../utils/createError.js'; // ดึงคัมภีร์ตัวกลางมาใช้งาน (.js เสมอตามระเบียบ)
 
+// 🎯 POST: api/v1/admin/user/addGolfer (ระบบเพิ่มนักกอล์ฟ)
 export const addGolfer = async (req: Request, res: Response) => {
   const { username, password, confirmPassword } = req.body;
 
@@ -28,34 +29,47 @@ export const addGolfer = async (req: Request, res: Response) => {
   });
 };
 
-// 🎯 POST: api/v1/auth/login (ลอจิกดักเช็คพาสเวิร์ดนักกอล์ฟ)
-export const login = async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+// 🎯 POST: api/v1/admin/user/changeRole (ระบบคุมสิทธิ์เปลี่ยนตำแหน่งนักกอล์ฟ)
+export const changeRole = async (req: Request, res: Response) => {
+  
+  // ============================================================
+  // 1. REQUEST MANAGEMENT (จัดการแกะกล่องนำเข้าข้อมูลจากหน้าด่าน req.body)
+  // ============================================================
+  const { username, global_role } = req.body;
 
-  // 1. ค้นหาชื่อยูสเซอร์ในถัง MySQL ผ่าน Prisma
-  const user = await prisma.user.findUnique({
-    where: { username: username },
+  // ============================================================
+  // 2. VALIDATION & 3. ERROR HANDLING (ตรวจตราคุณสมบัติและดักจับข้อผิดพลาด)
+  // ============================================================
+  if (!username || !global_role) {
+    throw createError(400, "ไม่สามารถเปลี่ยนสิทธิ์ได้: กรุณาระบุ username และ global_role ให้ครบถ้วนครับป๋า!");
+  }
+
+  // ค้นหายูสเซอร์ตัวจริงในระบบก่อนสั่งอัปเดต
+  const userExists = await prisma.user.findUnique({
+    where: { username: username }
   });
 
-  // ⚠️ ถ้าไม่พบชื่อผู้ใช้งานในระบบ ให้โยน Error ตัวกลางที่ป๋าออกแบบไว้ทันที
-  if (!user) {
-    throw createError(404, "ไม่พบชื่อผู้ใช้งานนี้ในระบบคลับครับป๋า!");
+  if (!userExists) {
+    throw createError(404, "ไม่พบชื่อยูสเซอร์นี้ในสนามกอล์ฟของเราครับป๋า!");
   }
 
-  // 2. ตรวจสอบรหัสผ่าน (ช่วงตั้งไข่เราเช็คสายอักขระตรง ๆ ก่อนครับ)
-  if (user.password !== password) {
-    throw createError(400, "รหัสผ่านไม่ถูกต้อง กรุณาเช็ควงสวิงอีกครั้งครับป๋า!");
-  }
+  // ============================================================
+  // 4. ACTION STEPS (ขั้นตอนปฏิบัติการสลักปรับสิทธิ์ข้อมูลผ่าน Prisma)
+  // ============================================================
+  const updatedUser = await prisma.user.update({
+    where: { username: username },
+    data: { global_role: global_role.toUpperCase() } // ปรับเป็นตัวใหญ่ตามกติกาสากล
+  });
 
-  // 3. ผ่านฉลุย ส่งข้อมูลความสำเร็จกลับไปให้หน้าบ้าน
+  // ============================================================
+  // n+1. RESPONSE MANAGEMENT (สรุปผลสำเร็จส่งสถานะสีเขียวกลับหน้าบ้าน)
+  // ============================================================
   res.status(200).json({
     success: true,
-    message: `ยินดีต้อนรับกลับสู่สนามครับ ป๋าได้รับการจัดสิทธิ์ให้เป็น [${user.global_role}] ⛳`,
+    message: `สลับบทบาทนักกอล์ฟ ${username} เป็นสิทธิ์ [${updatedUser.global_role}] เรียบร้อยครับป๋า! 👤`,
     data: {
-      user_id: user.user_id,
-      username: user.username,
-      fullname: user.fullname,
-      global_role: user.global_role
+      username: updatedUser.username,
+      global_role: updatedUser.global_role
     }
   });
 };

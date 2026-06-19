@@ -11,6 +11,8 @@
 | admin/user/addGolfer| post | y | - | - | { username, password, confirmPassword } | - for create new user |
 | admin/user/delGolfer | delete | y | :id | - | { username, password } | - for delete user |
 | admin/course/registerCourse | post | y | - | - | { course_name, section_name, hole_number, par, distance_yards } | - for register course: name, section & holes information |
+| admin/course/updateCourse | put | y | - | - | { course_name, section_name, hole_number, par, distance_yards } | - for update course: name, section & holes information |
+| admin/course/deleteCourse | post | y | :id | - | - | - for delete course: name, section & holes information |
 | admin/tournament/registerTournament | post | y | - | - | { tournament_name, tournament_mode, use_age_option, section_1_id, section_2_id, event_date, status } | - for register tournament |
 | admin/tournamnet/editScore | post | y | - | - | { tournament_name, username, ...all scores } | - edit all score for each user |
 | admin/tournament/closeTournament | put | y | :id | - | { status } | - for close tournament |

@@ -592,3 +592,10 @@ adminRouter.post('/tournament/close', (req, res) => {});
 export default adminRouter;
 ```
 
+## Step 8 update DB design standard, basic tech KB, and ER diagram R02
+```text
+see detail in
+TD-Working-Rules.md
+TD-Basic-Tech.md
+ER diagram: ER for TD project R02.drawio
+```
