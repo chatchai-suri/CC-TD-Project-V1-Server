@@ -6,6 +6,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// 0.1. ยัด Enum ประกาศสิทธิ์ 4 ขุนพลไว้ล่างสุดหรือบนสุดของไฟล์
+enum Role {
+  ADMIN
+  TD
+  SCORER
+  GOLFER
+}
+
 // 1. ตารางผู้ใช้งานระบบ (ชื่อในตู้ MySQL คือ "users")
 model User {
   user_id        Int            @id @default(autoincrement())
@@ -15,7 +23,7 @@ model User {
   nickname       String?
   phone_number   String?
   age            Int?           
-  global_role    String         @default("golfer")
+  global_role    Role           @default(GOLFER) // 👈 เปลี่ยนเป็น Role และถอดเครื่องหมายคำพูดออก
   created_at     DateTime       @default(now())
   updated_at     DateTime       @default(now()) @updatedAt // 👈 🎯 ดักจับบั๊กข้อมูลเก่าค้างแคช
 

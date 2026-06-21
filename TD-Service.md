@@ -21,8 +21,12 @@
 | td/tournament/registerTournament | post | y | - | - | { tournament_name, tournament_mode, use_age_option, section_1_id, section_2_id, event_date, status } | - for register tournament |
 | td/tournamnet/editScore | post | y | - | - | { tournament_name, username, ...all scores } | - edit all score for each user |
 | td/tournament/closeTourment | put | y | :id | - | { status } | - for close tournament |
+| td/flight/setupFlightWithMembers | post | y | :id | - | { fligh_id, user_id,... } | - for setup flight with members |
+| td/flight/deleteFlight | put | y | :id | - | { password } | - for delete flight |
+| td/flight/changeFlightName | put | y | :id | - | { flight_id, flight_name, password } | - for change flight name |
+| td/flight/changeFlightMembers | put | y | :id | - | { flight_id, user-id, password } | - for change flight-members name list |
 | ***Scorer Routing |
-| scorer/tournamnet/editFlightScore | post | y | - | - | { username, hole_number, travelling, putts } | - edit all score for member in same flight |
+| scorer/tournamnet/recordHoleScore | post | y | - | - | { flight_id, user_id, hole_id, stroke, par } | - record score for all members in same flight |
 | *** User Routing |
 | user/tournamnet/viewScore | get | y | :id | - | - | - edit all score for member in same flight |
 | user/tournamnet/editUserScore | post | y | - | - | { username, hole_number, travelling, putts } | - edit score of userhimself when tournament mode is casual |

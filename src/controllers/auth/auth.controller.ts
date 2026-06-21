@@ -1,30 +1,55 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../prisma.js'; //
-import createError from '../../utils/createError.js'; // ดึงคัมภีร์ตัวกลางมาใช้งาน (.js เสมอตามระเบียบ)
+import { prisma } from '../../prisma.js'; // 👈 นามสกุล .js ตามระเบียบ ES Module ยุคใหม่ 
+import createError from '../../utils/createError.js'; // 👈 ตัวดักจับ Error ส่วนกลาง 
 
+// 🎯 POST: api/v1/auth/registerUser (ลอจิกการลงทะเบียนผู้ใช้)
 export const registerUser = async (req: Request, res: Response) => {
-  const { username, password, confirmPassword } = req.body;
+  // ============================================================
+  // 1. REQUEST MANAGEMENT
+  // ============================================================
+  const { username, password, fullname, nickname, phone_number, age } = req.body;
 
-  // 🎯 ตรวจสอบสิทธิ์ด่านแรก: ถ้ารหัสไม่ตรงกัน สั่งโยนก้อน Error ด้วยบรรทัดเดียวสั้น ๆ ได้เลยครับป๋า
-  if (password !== confirmPassword) {
-    // โยนก้อนผิดพลาดรหัส 400 ออกไปให้ Express 5 จัดการส่งต่อไปที่ส่วนกลางเองอัตโนมัติ
-    throw createError(400, "รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกันครับป๋าปู!");
+  // ============================================================
+  // 2. VALIDATION & 3. ERROR HANDLING
+  // ============================================================
+  if (!fullname) {
+    throw createError(400, "ไม่สามารถลงทะเบียนได้: กรุณาระบุชื่อ-นามสกุลจริงด้วยครับป๋า!");
   }
 
-  const newPlayer = await prisma.user.create({
+  // ดักจับ Username ซ้ำล่วงหน้าระดับแอป (Strict Checking)
+  if (username) {
+    const existingUser = await prisma.user.findUnique({ where: { username } }); // [cite: 1, 2]
+    if (existingUser) {
+      throw createError(400, `Username "${username}" นี้มีคนใช้ในสนามแล้วครับป๋า!`);
+    }
+  }
+
+  // ============================================================
+  // 4. ACTION STEPS (สลักข้อมูลลงตู้ MySQL ผ่านท่อ 3307)
+  // ============================================================
+  const newUser = await prisma.user.create({ // [cite: 1]
     data: {
-      username,
-      password,
-      fullname: username,
-      nickname: "นักกอล์ฟใหม่",
-      global_role: "USER" //
-    },
+      username: username || null, // [cite: 1, 2]
+      password: password || null, // 👈 เฟสแรกยังไม่แฮช รันแบบ Simply Standard เพื่อเช็ค Data Flow 
+      fullname, // [cite: 1, 3]
+      nickname: nickname || null, // [cite: 1, 3]
+      phone_number: phone_number || null, // [cite: 1, 4]
+      age: age ? Number(age) : null, // 👈 มั่นใจว่าเป็น Int ป้องกัน Type เพี้ยนตอนเข้าฐานข้อมูล [cite: 1, 4, 7]
+      global_role: "GOLFER" // 👈 ค่าเริ่มต้นสากลนิยม [cite: 1, 5]
+    }
   });
 
+  // ============================================================
+  // n+1. RESPONSE MANAGEMENT
+  // ============================================================
   res.status(201).json({
     success: true,
-    message: `เพิ่มรายชื่อนักกอล์ฟ ${username} สำเร็จเรียบร้อยครับ! 👤`,
-    data: newPlayer,
+    message: `สลักชื่อนักกอล์ฟ "${fullname}" เข้าสู่ระบบท่อฐานข้อมูลเรียบร้อยแล้วครับป๋า! 🏌️‍♂️`,
+    data: {
+      user_id: newUser.user_id, // [cite: 1]
+      username: newUser.username, // [cite: 1, 2]
+      fullname: newUser.fullname // [cite: 1, 3]
+    }
   });
 };
 
