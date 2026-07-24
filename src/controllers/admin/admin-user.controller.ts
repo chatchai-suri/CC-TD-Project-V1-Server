@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../prisma.js'; //
-import createError from '../../utils/createError.js'; // ดึงคัมภีร์ตัวกลางมาใช้งาน (.js เสมอตามระเบียบ)
+import { prisma } from '../../config/prisma.js'; //
+import { createError } from '../../utils/createError.js'; // ดึงคัมภีร์ตัวกลางมาใช้งาน (.js เสมอตามระเบียบ)
 
 // 🎯 POST: api/v1/admin/user/addGolfer (ระบบเพิ่มนักกอล์ฟ)
 export const addGolfer = async (req: Request, res: Response) => {
@@ -18,7 +18,7 @@ export const addGolfer = async (req: Request, res: Response) => {
       password,
       fullname: username,
       nickname: "นักกอล์ฟใหม่",
-      global_role: "USER" //
+      global_role: "GOLFER" //
     },
   });
 

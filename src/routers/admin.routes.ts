@@ -1,7 +1,7 @@
 import {Router} from 'express';
-import {registerCourse} from '../controllers/admin/course.controller.js';
-import {addGolfer, changeRole} from '../controllers/admin/user.controller.js';
-import {registerTournament} from '../controllers/admin/tournament.controller.js';
+import {registerCourse} from '../controllers/admin/admin-course.controller.js';
+import {addGolfer, changeRole} from '../controllers/admin/admin-user.controller.js';
+import {registerTournament} from '../controllers/admin/admin-tournament.controller.js';
 
 const adminRouter = Router();
 

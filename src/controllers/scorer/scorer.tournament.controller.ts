@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../prisma.js'; // 
-import createError from '../../utils/createError.js'; // 
+import { prisma } from '../../config/prisma.js'; // 
+import { createError } from '../../utils/createError.js'; // 
 
+// 🎯 POST: api/v1/scorer/tournament/recordHoleScore (ลอจิกการบันทึกคะแนนรายหลุม)
 export const recordHoleScore = async (req: Request, res: Response) => {
   // ============================================================
   // 1. REQUEST MANAGEMENT
@@ -78,6 +79,65 @@ export const recordHoleScore = async (req: Request, res: Response) => {
       hole_par: holePar,
       to_par: toParResult,
       display: toParDisplay // 👈 ตัวอักษรด่านหน้า "E", "+1", "-2" ดึงไปขึ้นจอสมาร์ทโฟนได้ทันที!
+    }
+  });
+};
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+// 🎯 GET: api/v1/scorer/tournament/:tournament_id/user/:user_id/summary (ลอจิกการสรุปผลคะแนนรวมรายบุคคล)
+export const getGolferSummary = async (req: Request, res: Response) => {
+  // 1. REQUEST MANAGEMENT
+  const { tournament_id, user_id } = req.params;
+
+  // 2. VALIDATION & 3. ERROR HANDLING
+  if (!tournament_id || !user_id) {
+    throw createError(400, "ระเบียบข้อมูลไม่ครบถ้วน: กรุณาระบุ tournament_id และ user_id ด้วยครับป๋า!");
+  }
+
+  // 4. ACTION STEPS (ยิงท่อส่องคะแนนดิบทั้งหมดผูกพ่วงหาค่า Par ประจำหลุม)
+  const scores = await prisma.score.findMany({
+    where: {
+      user_id: Number(user_id),
+      flight: { tournament_id: Number(tournament_id) } // ส่องเรดาร์ข้ามไปคัดกรองทัวร์นาเมนต์แม่
+    },
+    include: {
+      hole: true // หยิบเอาข้อมูลหลุมมาส่องค่า Par
+    }
+  });
+
+  if (scores.length === 0) {
+    return res.status(200).json({
+      success: true,
+      message: "นักกอล์ฟท่านนี้ยังไม่มีการบันทึกคะแนนดิบลงสนามครับป๋า!",
+      data: { holes_played: 0, total_gross: 0, total_to_par: 0, display: "E" }
+    });
+  }
+  console.log("🚀 ดึงข้อมูลคะแนนดิบรายหลุมพร้อมค่า Par จากฐานข้อมูลสำเร็จแล้วครับป๋า!", scores);
+
+  // ลอจิกคณิตศาสตร์กอล์ฟ: วนลูปบวกสะสมรวมแต้มดิบ และ คำนวณหา To-Par รวม
+  let totalGross = 0;
+  let totalToPar = 0;
+  const holesPlayed = scores.length;
+
+  scores.forEach(score => {
+    totalGross += score.strokes;
+    const holePar = score.hole.par;
+    totalToPar += (score.strokes - holePar); // (Strokes - Par) สะสมไปเรื่อยๆ
+  });
+
+  let toParDisplay = `${totalToPar}`; // ใช้ format template literal แปลงตัวเลขเป็นข้อความ แล้วส่งให้ display (หน้าด่านแสดงผล) ในหน้า Leaderboard 
+  if (totalToPar === 0) toParDisplay = "E";
+  if (totalToPar > 0) toParDisplay = `+${totalToPar}`;
+
+  // n+1. RESPONSE MANAGEMENT
+  res.status(200).json({
+    success: true,
+    data: {
+      holes_played: holesPlayed,
+      total_gross: totalGross,
+      total_to_par: totalToPar,
+      display: toParDisplay
     }
   });
 };

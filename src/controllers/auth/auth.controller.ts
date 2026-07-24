@@ -1,79 +1,84 @@
-import type { Request, Response } from 'express';
-import { prisma } from '../../prisma.js'; // 👈 นามสกุล .js ตามระเบียบ ES Module ยุคใหม่ 
-import createError from '../../utils/createError.js'; // 👈 ตัวดักจับ Error ส่วนกลาง 
+// src/controllers/auth/auth.controller.ts
+import { Request, Response, NextFunction } from 'express';
+import { prisma } from '../../config/prisma.js'; // 🔁 นำเข้า Instance ฐานข้อมูลพ่วง .js ตามกฎข้อที่ 3 ของสโมสร
+import { createError } from '../../utils/createError.js'; // 🔁 ตัวดักจับข้อผิดพลาดส่วนกลางที่ป๋าปูวางท่อไว้
 
-// 🎯 POST: api/v1/auth/registerUser (ลอจิกการลงทะเบียนผู้ใช้)
-export const registerUser = async (req: Request, res: Response) => {
-  // ============================================================
-  // 1. REQUEST MANAGEMENT
-  // ============================================================
+/**
+ * 🎯 POST: /api/v1/auth/register (ลอจิกการลงทะเบียนนักกอล์ฟและแคดดี้เข้าระบบ)
+ * 🔒 เลเยอร์ 4 ชั้น Express v5 Compliance ปราศจาก Try-Catch บวมรกสายตา
+ */
+export const registerUser = async (req: Request, res: Response, next: NextFunction) => {
+  // 📥 4.1 Request Management: แกะห่อพัสดุรับช่วงข้อมูลขาเข้า
   const { username, password, fullname, nickname, phone_number, age } = req.body;
 
-  // ============================================================
-  // 2. VALIDATION & 3. ERROR HANDLING
-  // ============================================================
+  // 🛡️ 4.2 Validation & 4.3 Error Handling: ด่านตรวจสัญญาณเด็ดขาด
   if (!fullname) {
     throw createError(400, "ไม่สามารถลงทะเบียนได้: กรุณาระบุชื่อ-นามสกุลจริงด้วยครับป๋า!");
   }
 
-  // ดักจับ Username ซ้ำล่วงหน้าระดับแอป (Strict Checking)
+  // ดักจับรายชื่อยูสเซอร์เนมซ้ำซ้อนระดับชั้นแอปพลิเคชัน (Strict checking)
   if (username) {
-    const existingUser = await prisma.user.findUnique({ where: { username } }); // [cite: 1, 2]
+    const existingUser = await prisma.user.findUnique({ where: { username } });
     if (existingUser) {
       throw createError(400, `Username "${username}" นี้มีคนใช้ในสนามแล้วครับป๋า!`);
     }
   }
 
-  // ============================================================
-  // 4. ACTION STEPS (สลักข้อมูลลงตู้ MySQL ผ่านท่อ 3307)
-  // ============================================================
-  const newUser = await prisma.user.create({ // [cite: 1]
+  // 🏗️ 4.4 Action Steps: สลักข้อมูลลงตู้ MySQL ผ่านอุโมงค์พอร์ต 3307
+  const newUser = await prisma.user.create({
     data: {
-      username: username || null, // [cite: 1, 2]
-      password: password || null, // 👈 เฟสแรกยังไม่แฮช รันแบบ Simply Standard เพื่อเช็ค Data Flow 
-      fullname, // [cite: 1, 3]
-      nickname: nickname || null, // [cite: 1, 3]
-      phone_number: phone_number || null, // [cite: 1, 4]
-      age: age ? Number(age) : null, // 👈 มั่นใจว่าเป็น Int ป้องกัน Type เพี้ยนตอนเข้าฐานข้อมูล [cite: 1, 4, 7]
-      global_role: "GOLFER" // 👈 ค่าเริ่มต้นสากลนิยม [cite: 1, 5]
+      username: username || null,
+      password: password || null, // 👈 เฟสแรกคงสายอักขระดิบตามความต้องการของป๋าปูเพื่อพรูฟ Data Flow
+      fullname,
+      nickname: nickname || null,
+      phone_number: phone_number || null,
+      age: age ? Number(age) : null, // 👈 มั่นใจว่าเป็นสัญญานประเภท Int ป้องกัน Type หลังบ้านเพี้ยน
+      global_role: "GOLFER" // 👈 ค่าเริ่มต้นสากลนิยมฝั่งโมดูลผู้เล่น
     }
   });
 
-  // ============================================================
-  // n+1. RESPONSE MANAGEMENT
-  // ============================================================
-  res.status(201).json({
+  // 📤 4.n+1 Response Management: ส่งข้อมูลสถานะสีเขียวสำเร็จกลับไปกางตารางหน้าบ้าน
+  return res.status(201).json({
     success: true,
     message: `สลักชื่อนักกอล์ฟ "${fullname}" เข้าสู่ระบบท่อฐานข้อมูลเรียบร้อยแล้วครับป๋า! 🏌️‍♂️`,
     data: {
-      user_id: newUser.user_id, // [cite: 1]
-      username: newUser.username, // [cite: 1, 2]
-      fullname: newUser.fullname // [cite: 1, 3]
+      user_id: newUser.user_id,
+      username: newUser.username,
+      fullname: newUser.fullname
     }
   });
 };
 
-// 🎯 POST: api/v1/auth/login (ลอจิกดักเช็คพาสเวิร์ดนักกอล์ฟ)
-export const login = async (req: Request, res: Response) => {
+/**
+ * 🎯 POST: /api/v1/auth/login (ลอจิกดักเช็คพาสเวิร์ดเพื่อแจกตั๋วสิทธิ์ควบคุม)
+ * 🔒 เลเยอร์ 4 ชั้น Express v5 Compliance ไหลคลีนจากบนลงล่าง
+ */
+export const login = async (req: Request, res: Response, next: NextFunction) => {
+  // 📥 4.1 Request Management
   const { username, password } = req.body;
 
-  // 1. ค้นหาชื่อยูสเซอร์ในถัง MySQL ผ่าน Prisma
+  // 🛡️ 4.2 Validation & 4.3 Error Handling
+  if (!username || !password) {
+    throw createError(400, "กรุณากรอก username และ password ให้ครบถ้วนด้วยครับป๋า");
+  }
+
+  // 🏗️ 4.4 Action Steps: ค้นหาชื่อยูสเซอร์ในถัง MySQL ผ่านเครือข่ายความปลอดภัย
   const user = await prisma.user.findUnique({
     where: { username: username },
   });
 
-  // ⚠️ ถ้าไม่พบชื่อผู้ใช้งานในระบบ ให้โยน Error ตัวกลางที่ป๋าออกแบบไว้ทันที
+  // ⚠️ หากควานหาในตู้ฐานข้อมูลแล้วไม่พบชื่อผู้ใช้งาน ให้โยน Error ทันที
   if (!user) {
     throw createError(404, "ไม่พบชื่อผู้ใช้งานนี้ในระบบคลับครับป๋า!");
   }
 
-  // 2. ตรวจสอบรหัสผ่าน (ช่วงตั้งไข่เราเช็คสายอักขระตรง ๆ ก่อนครับ)
+  // ตรวจสอบรหัสผ่านสายอักขระดิบเคลียร์หน้างานช่วงตั้งไข่
   if (user.password !== password) {
     throw createError(400, "รหัสผ่านไม่ถูกต้อง กรุณาเช็ควงสวิงอีกครั้งครับป๋า!");
   }
 
-  // 3. ผ่านฉลุย ส่งข้อมูลความสำเร็จกลับไปให้หน้าบ้าน
-  res.status(200).json({
+  // 📤 4.n+1 Response Management: ผ่านฉลุย ส่งสิทธิ์กลับไปกางปุ่มหน้าบ้าน React
+  return res.status(200).json({
     success: true,
     message: `ยินดีต้อนรับกลับสู่สนามครับ ป๋าได้สิทธิ์ในฐานะ [${user.global_role}] ⛳`,
     data: {

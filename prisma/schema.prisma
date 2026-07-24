@@ -24,6 +24,8 @@ model User {
   phone_number   String?
   age            Int?           
   global_role    Role           @default(GOLFER) // 👈 เปลี่ยนเป็น Role และถอดเครื่องหมายคำพูดออก
+  // 👑 งอกคอลัมน์ไอคอนโปรไฟล์จำลอง รองรับระบบ Cloudinary และการแสดงผลบน Mobile
+  profile_icon   String?        @default("https://api.dicebear.com/7.x/adventurer/svg?seed=porn")
   created_at     DateTime       @default(now())
   updated_at     DateTime       @default(now()) @updatedAt // 👈 🎯 ดักจับบั๊กข้อมูลเก่าค้างแคช
 
@@ -89,7 +91,9 @@ model Tournament {
   use_age_option  Boolean  @default(false) 
   course_id       Int
   event_date      DateTime @db.Date
-  status          String   @default("setup") 
+  status          String   @default("setup") // รักษา String ไว้ค้ำจุนฟอนต์หน้าบ้านชั่วคราว
+  // 🔍 คอลัมน์เก็บข้อความรายชื่อหลุมลับ Peoria จากฉลากกลางงานเลี้ยงปาร์ตี้
+  peoria_holes    String?
   created_at      DateTime @default(now())
   updated_at      DateTime @default(now()) @updatedAt 
 
@@ -122,7 +126,10 @@ model FlightMember {
   flight_member_id Int      @id @default(autoincrement())
   flight_id        Int
   user_id          Int
-  handicap_claim   Int?   
+  handicap_claim   Int?
+  // 🎯 สลักแต้มต่อ และแต้มสุทธิที่ประมวลผล Peoria สะเด็ดน้ำลงล็อกตารางถาวร
+  calculated_hd    Float?   @default(0)
+  calculated_net   Float?   @default(0)   
   created_at       DateTime @default(now())
   updated_at       DateTime @default(now()) @updatedAt
 

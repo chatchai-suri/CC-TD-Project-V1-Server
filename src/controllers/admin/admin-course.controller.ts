@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../prisma.js'; // นามสกุล .js ตามข้อบังคับโมดูลสากล
+import { prisma } from '../../config/prisma.js'; // นามสกุล .js ตามข้อบังคับโมดูลสากล
 
 // 🎯 POST: admin/course/register หรือ td/course/register
 export const registerCourse = async (req: Request, res: Response) => {

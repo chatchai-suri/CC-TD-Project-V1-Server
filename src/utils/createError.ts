@@ -1,19 +1,20 @@
-// 🎯 1. สลักพิมพ์เขียวบอกครูระเบียบว่า AppError ตัวนี้มีคีย์พิเศษแถมมาด้วยนะ
-export interface AppError extends Error {
+// src/utils/createError.ts
+/**
+ * 🎯 วัตถุประสงค์หลัก: ตัวสร้างวัตถุข้อผิดพลาดมาตรฐาน (Custom Error Generator)
+ * 🛡️ ระเบียบระบบ: สอดคล้องกับระเบียบ Express v5 Handling ปราศจาก Try-Catch ซ้ำซ้อน
+ */
+
+interface CustomError extends Error {
   statusCode?: number;
-  success?: boolean;
-  errors?: any;
 }
 
-// 🎯 2. ฟังก์ชันตัวกลางสำหรับเนรมิตก้อน Error ประจำโปรเจกต์ TD
-export default function createError(statusCode: number, message: string, errors: any = null): AppError {
-  // สร้างก้อน Error ดั้งเดิมขึ้นมาก่อน
-  const error = new Error(message) as AppError;
-  
-  // ฉีดพ่นคีย์พิเศษเข้าไปทำงานร่วมกับ Global Error Middleware ได้อย่างสมบูรณ์
+/**
+ * ฟังก์ชันสร้าง Custom Error พ่วง Status Code ส่งออกระบบ
+ * @param statusCode รหัสสถานะ HTTP Error เช่น 400, 401, 403, 404
+ * @param message ข้อความดิบแจ้งเตือนความผิดพลาดภาษาไทย
+ */
+export function createError(statusCode: number, message: string): CustomError {
+  const error: CustomError = new Error(message);
   error.statusCode = statusCode;
-  error.success = false;
-  error.errors = errors;
-
   return error;
 }

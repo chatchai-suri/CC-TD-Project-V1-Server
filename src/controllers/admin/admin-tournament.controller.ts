@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../prisma.js'; // นามสกุล .js ตามข้อบังคับโมดูล[cite: 7]
-import createError from '../../utils/createError.js';
+import { prisma } from '../../config/prisma.js'; // นามสกุล .js ตามข้อบังคับโมดูล[cite: 7]
+import { createError } from '../../utils/createError.js';
 
 /**
  * 🎯 คัมภีร์ควบคุม: ระบบลงทะเบียนแมตช์การแข่งขัน (Tournament Register)

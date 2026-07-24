@@ -1,0 +1,187 @@
+// src/controllers/user/user.tournament.controller.ts
+import { Request, Response } from 'express';
+import { prisma } from '../../config/prisma.js';
+import { createError } from '../../utils/createError.js';
+
+// =========================================================================
+// 🎯 MODULE 1: เรียกดูรายการทัวร์นาเมนต์ทั้งหมด
+// =========================================================================
+export const getAllTournaments = async (req: Request, res: Response) => {
+  const tournamentData = await prisma.tournament.findMany({
+    orderBy: { event_date: 'desc' },
+  });
+
+  return res.status(200).json({
+    success: true,
+    data: tournamentData
+  });
+};
+
+// =========================================================================
+// 🎯 MODULE 2: ส่องกระดานลีดเดอร์บอร์ดภาพรวม
+// =========================================================================
+export const getPublicLeaderboard = async (req: Request, res: Response) => {
+  const { tournament_id } = req.params;
+
+  if (!tournament_id || isNaN(Number(tournament_id))) {
+    throw createError(400, "สายสัญญาณขัดข้อง: รหัสทัวร์นาเมนต์ไม่ถูกต้องครับป๋า!");
+  }
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { tournament_id: Number(tournament_id) }
+  });
+
+  if (!tournament) {
+    throw createError(404, "ไม่พบรายการแข่งขันนี้ในระบบสารบบครับป๋า!");
+  }
+
+  const isLive = tournament.status === "live";
+
+  // 💡 ดึงเฉพาะ 18 หลุมแรกเพื่อคำนวณ Par สนามจริง (ได้ 71 ตรงเป๊ะ)
+  const courseHoles = await prisma.hole.findMany({
+    where: {
+      section: {
+        course_id: tournament.course_id
+      }
+    },
+    orderBy: { hole_id: 'asc' },
+    take: 18
+  });
+
+  const validHoles = courseHoles.length >= 18 ? courseHoles : await prisma.hole.findMany({ take: 18, orderBy: { hole_id: 'asc' } });
+  const realTotalCoursePar = validHoles.reduce((sum, h) => sum + h.par, 0) || 71;
+
+  const flights = await prisma.flight.findMany({
+    where: { tournament_id: Number(tournament_id) },
+    include: {
+      members: {
+        include: {
+          user: {
+            omit: { password: true },
+            include: { scores: { include: { hole: true }, take: 18 } }
+          }
+        }
+      }
+    }
+  });
+
+  let leaderboardData: any[] = [];
+
+  flights.forEach(flight => {
+    flight.members.forEach(member => {
+      const golfer = member.user;
+      let totalGross = 0;
+      let totalToPar = 0;
+      let outGross = 0;
+      let inGross = 0;
+
+      const userScores = golfer.scores;
+      const holesPlayed = userScores.length;
+
+      userScores.forEach(score => {
+        totalGross += score.strokes;
+        const par = score.hole.par;
+        totalToPar += (score.strokes - par);
+
+        if (score.hole.hole_no <= 9) outGross += score.strokes;
+        else inGross += score.strokes;
+      });
+
+      let displayToPar = `${totalToPar}`;
+      if (holesPlayed === 0) displayToPar = "E";
+      else if (totalToPar === 0) displayToPar = "E";
+      else if (totalToPar > 0) displayToPar = `+${totalToPar}`;
+
+      const hdValue = Number(member.calculated_hd || 0);
+      const netValue = Number(member.calculated_net || totalGross);
+
+      leaderboardData.push({
+        user_id: golfer.user_id,
+        fullname: golfer.fullname,
+        nickname: golfer.nickname || "-",
+        profile_icon: golfer.profile_icon,
+        flight_name: flight.flight_name,
+        holes_played: holesPlayed,
+        out_gross: outGross,
+        in_gross: inGross,
+        total_gross: totalGross,
+        total_to_par: totalToPar,
+        display_to_par: displayToPar,
+        handicap: isLive ? 0 : hdValue,
+        net: isLive ? totalGross : netValue
+      });
+    });
+  });
+
+  if (isLive) {
+    leaderboardData.sort((a, b) => {
+      if (a.holes_played === 0 && b.holes_played > 0) return 1;
+      if (b.holes_played === 0 && a.holes_played > 0) return -1;
+      if (a.total_to_par !== b.total_to_par) return a.total_to_par - b.total_to_par;
+      return b.holes_played - a.holes_played;
+    });
+  } else {
+    leaderboardData.sort((a, b) => {
+      if (a.net !== b.net) return a.net - b.net;
+      if (a.handicap !== b.handicap) return a.handicap - b.handicap;
+      return (b.age || 0) - (a.age || 0);
+    });
+  }
+
+  let currentRank = 1;
+  leaderboardData.forEach((player, index) => {
+    const compareKey = isLive ? 'total_gross' : 'net';
+    if (index > 0 && player[compareKey] === leaderboardData[index - 1][compareKey]) {
+      player.rank = leaderboardData[index - 1].rank;
+    } else {
+      player.rank = currentRank;
+    }
+    currentRank++;
+  });
+
+  return res.status(200).json({
+    success: true,
+    tournament_name: tournament.tournament_name,
+    status: tournament.status,
+    par: realTotalCoursePar, // พ่นค่า Par 71 เป๊ะตรง DB
+    handicap_rule: tournament.use_age_option ? "Peoria-DMN (Hybrid Age)" : "Peoria-DMN System",
+    peoria_hidden_holes: isLive ? "??, ??, ??, ??, ??, ??" : (tournament.peoria_holes || "ยังไม่มีการเฉลย"),
+    leaderboard: leaderboardData
+  });
+};
+
+// =========================================================================
+// 🎯 MODULE 3: ดึงคะแนนดิบรายหลุมส่วนบุคคล (Official Scorecard Data)
+// =========================================================================
+
+// 🎯 GET: "/api/v1/user/scorecard/:userId"
+export const getPlayerScoreCard = async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  if (!userId || isNaN(Number(userId))) {
+    throw createError(400, "กรุณาระบุรหัสผู้ใช้งานให้ถูกต้องครับป๋า!");
+  }
+
+  // 💡 ดึง 18 หลุมของนักกอล์ฟ และส่งส่งโครงสร้าง Array คลีน 100%
+  const scores = await prisma.score.findMany({
+    where: {
+      user_id: Number(userId)
+    },
+    include: { hole: true },
+    orderBy: { hole: { hole_no: 'asc' } },
+    take: 18
+  });
+
+  const hole_scores = scores.map(s => ({
+    hole_no: s.hole.hole_no,
+    par: s.hole.par,
+    stroke: s.strokes,
+    strokes: s.strokes,
+    index: s.hole.index
+  }));
+
+  return res.status(200).json({
+    success: true,
+    hole_scores
+  });
+};

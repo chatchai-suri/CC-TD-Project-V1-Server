@@ -1,6 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { prisma } from './prisma.js'; // นามสกุล .js ตามระเบียบ ES Module ยุคใหม่ 
+import { prisma } from './config/prisma.js'; // นามสกุล .js ตามระเบียบ ES Module ยุคใหม่ 
 
 // ปลุกพลังให้ Node.js อ่านค่าจากไฟล์ .env เข้าไปในระบบ
 dotenv.config();

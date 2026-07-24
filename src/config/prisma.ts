@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
 // 🎯 ไม้ตายปิดฉากศึก: ป้อนก้อนพิมพ์เขียวตั้งค่ามุดท่อพอร์ต 3307 ให้ PrismaMariaDb ตรง ๆ เลยครับป๋า!
 // วิธีนี้ตัดการใช้คำสั่ง mariadb.createPool() ดักหน้าออกไป เส้นแดงหยักจะหายวับไปทันที 100%
 const adapter = new PrismaMariaDb({
-  host: process.env.DB_HOST || '127.0.0.1',
+  host: process.env.DB_HOST || '100.83.39.48',
   port: Number(process.env.DB_PORT) || 3307,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || 'golf_root_password',
