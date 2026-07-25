@@ -3,9 +3,6 @@ import { Request, Response } from 'express';
 import { prisma } from '../../config/prisma.js';
 import { createError } from '../../utils/createError.js';
 
-// =========================================================================
-// 🎯 MODULE 1: เรียกดูรายการทัวร์นาเมนต์ทั้งหมด
-// =========================================================================
 export const getAllTournaments = async (req: Request, res: Response) => {
   const tournamentData = await prisma.tournament.findMany({
     orderBy: { event_date: 'desc' },
@@ -17,9 +14,6 @@ export const getAllTournaments = async (req: Request, res: Response) => {
   });
 };
 
-// =========================================================================
-// 🎯 MODULE 2: ส่องกระดานลีดเดอร์บอร์ดภาพรวม
-// =========================================================================
 export const getPublicLeaderboard = async (req: Request, res: Response) => {
   const { tournament_id } = req.params;
 
@@ -35,30 +29,44 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
     throw createError(404, "ไม่พบรายการแข่งขันนี้ในระบบสารบบครับป๋า!");
   }
 
-  const isLive = tournament.status === "live";
+  const matchStatus = tournament.status?.toLowerCase() || "live";
+  const isLive = matchStatus === "live";
 
-  // 💡 ดึงเฉพาะ 18 หลุมแรกเพื่อคำนวณ Par สนามจริง (ได้ 71 ตรงเป๊ะ)
+  // 💡 ดึง Master Holes 18 หลุมของสนามที่ผูกกับ tournament_id นี้โดยตรง 100%
   const courseHoles = await prisma.hole.findMany({
     where: {
       section: {
         course_id: tournament.course_id
       }
     },
-    orderBy: { hole_id: 'asc' },
+    orderBy: { hole_no: 'asc' },
     take: 18
   });
 
-  const validHoles = courseHoles.length >= 18 ? courseHoles : await prisma.hole.findMany({ take: 18, orderBy: { hole_id: 'asc' } });
-  const realTotalCoursePar = validHoles.reduce((sum, h) => sum + h.par, 0) || 71;
+  const validHoles = courseHoles.length >= 18 ? courseHoles : await prisma.hole.findMany({ take: 18, orderBy: { hole_no: 'asc' } });
+  const realTotalCoursePar = validHoles.reduce((sum, h) => sum + h.par, 0) || 70;
+
+  // 🗺️ สร้าง Master Array 18 หลุมส่งกลับไปให้ Store Caching
+  const masterHolesList = validHoles.map(h => ({
+    hole_no: h.hole_no,
+    par: h.par,
+    index: h.index || h.hole_no
+  }));
+
+  const courseHoleParMap = new Map();
+  validHoles.forEach(h => courseHoleParMap.set(h.hole_no, h.par));
 
   const flights = await prisma.flight.findMany({
     where: { tournament_id: Number(tournament_id) },
     include: {
+      scores: {
+        include: { hole: true },
+        orderBy: { recorded_at: 'desc' }
+      },
       members: {
         include: {
           user: {
-            omit: { password: true },
-            include: { scores: { include: { hole: true }, take: 18 } }
+            omit: { password: true }
           }
         }
       }
@@ -68,6 +76,8 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
   let leaderboardData: any[] = [];
 
   flights.forEach(flight => {
+    const flightScores = flight.scores || [];
+
     flight.members.forEach(member => {
       const golfer = member.user;
       let totalGross = 0;
@@ -75,16 +85,31 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
       let outGross = 0;
       let inGross = 0;
 
-      const userScores = golfer.scores;
+      const userRawScores = flightScores.filter(
+        (s: any) => Number(s.user_id) === Number(golfer.user_id)
+      );
+
+      const uniqueHoleScoresMap = new Map();
+      userRawScores.forEach((score: any) => {
+        const holeNo = score.hole?.hole_no;
+        if (holeNo && !uniqueHoleScoresMap.has(holeNo)) {
+          uniqueHoleScoresMap.set(holeNo, score);
+        }
+      });
+
+      const userScores = Array.from(uniqueHoleScoresMap.values());
       const holesPlayed = userScores.length;
 
-      userScores.forEach(score => {
-        totalGross += score.strokes;
-        const par = score.hole.par;
-        totalToPar += (score.strokes - par);
+      userScores.forEach((score: any) => {
+        const holeNo = score.hole?.hole_no;
+        const strokes = Number(score.strokes || 0);
+        const par = courseHoleParMap.get(holeNo) || Number(score.hole?.par || 4);
 
-        if (score.hole.hole_no <= 9) outGross += score.strokes;
-        else inGross += score.strokes;
+        totalGross += strokes;
+        totalToPar += (strokes - par);
+
+        if (holeNo <= 9) outGross += strokes;
+        else inGross += strokes;
       });
 
       let displayToPar = `${totalToPar}`;
@@ -117,7 +142,11 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
     leaderboardData.sort((a, b) => {
       if (a.holes_played === 0 && b.holes_played > 0) return 1;
       if (b.holes_played === 0 && a.holes_played > 0) return -1;
-      if (a.total_to_par !== b.total_to_par) return a.total_to_par - b.total_to_par;
+
+      if (a.total_to_par !== b.total_to_par) {
+        return a.total_to_par - b.total_to_par;
+      }
+
       return b.holes_played - a.holes_played;
     });
   } else {
@@ -130,8 +159,9 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
 
   let currentRank = 1;
   leaderboardData.forEach((player, index) => {
-    const compareKey = isLive ? 'total_gross' : 'net';
-    if (index > 0 && player[compareKey] === leaderboardData[index - 1][compareKey]) {
+    const compareKey = isLive ? 'total_to_par' : 'net';
+    
+    if (index > 0 && player.holes_played > 0 && player[compareKey] === leaderboardData[index - 1][compareKey]) {
       player.rank = leaderboardData[index - 1].rank;
     } else {
       player.rank = currentRank;
@@ -139,22 +169,21 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
     currentRank++;
   });
 
+  // 📝 Log ส่องดู Master Holes รายสนามใน Terminal ฝั่ง Server
+  console.log(`⛳ [Express Server] Fetched Master Holes for Tournament ID ${tournament_id}: Total Holes = ${masterHolesList.length}`);
+
   return res.status(200).json({
     success: true,
     tournament_name: tournament.tournament_name,
     status: tournament.status,
-    par: realTotalCoursePar, // พ่นค่า Par 71 เป๊ะตรง DB
+    par: realTotalCoursePar,
     handicap_rule: tournament.use_age_option ? "Peoria-DMN (Hybrid Age)" : "Peoria-DMN System",
     peoria_hidden_holes: isLive ? "??, ??, ??, ??, ??, ??" : (tournament.peoria_holes || "ยังไม่มีการเฉลย"),
+    holes: masterHolesList, // 🟢 พ่วง Master Holes 18 หลุมของสนามส่งกลับไป
     leaderboard: leaderboardData
   });
 };
 
-// =========================================================================
-// 🎯 MODULE 3: ดึงคะแนนดิบรายหลุมส่วนบุคคล (Official Scorecard Data)
-// =========================================================================
-
-// 🎯 GET: "/api/v1/user/scorecard/:userId"
 export const getPlayerScoreCard = async (req: Request, res: Response) => {
   const { userId } = req.params;
 
@@ -162,7 +191,6 @@ export const getPlayerScoreCard = async (req: Request, res: Response) => {
     throw createError(400, "กรุณาระบุรหัสผู้ใช้งานให้ถูกต้องครับป๋า!");
   }
 
-  // 💡 ดึง 18 หลุมของนักกอล์ฟ และส่งส่งโครงสร้าง Array คลีน 100%
   const scores = await prisma.score.findMany({
     where: {
       user_id: Number(userId)

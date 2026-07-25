@@ -97,19 +97,18 @@ export const closeTournamentByPeoriaDMN = async (req: Request, res: Response) =>
     throw createError(404, "ไม่พบข้อมูลรายการแข่งขันนี้ในระบบคลังครับป๋า!");
   }
 
-  // 💡 จุดแก้ระดับรากฐาน: ดึงหลุมเฉพาะ 18 หลุมแรกที่เรียงตาม hole_no 1-18 ตัดส่วนเกิน 177 ทิ้งไป!
+  // 💡 จุดแก้ระดับรากฐาน: ดึงหลุมเฉพาะ 18 หลุมแรกที่เรียงตาม hole_no 1-18 สลักค่า Par สนามจริง
   const targetHoles = await prisma.hole.findMany({
     where: {
       section: {
         course_id: tournament.course_id
       }
     },
-    orderBy: { hole_id: 'asc' },
+    orderBy: { hole_no: 'asc' },
     take: 18
   });
 
-  // กรณีดึงผ่าน relation ไม่ได้ ให้ fallback ดึง 18 หลุมแรกในตาราง holes
-  const valid18Holes = targetHoles.length >= 18 ? targetHoles : await prisma.hole.findMany({ take: 18, orderBy: { hole_id: 'asc' } });
+  const valid18Holes = targetHoles.length >= 18 ? targetHoles : await prisma.hole.findMany({ take: 18, orderBy: { hole_no: 'asc' } });
 
   let courseTotalPar = 0;
   const secretHoleNos = new Set(peoria_holes.map(Number));
@@ -118,7 +117,7 @@ export const closeTournamentByPeoriaDMN = async (req: Request, res: Response) =>
     courseTotalPar += h.par;
   });
 
-  if (courseTotalPar === 0 || courseTotalPar > 100) courseTotalPar = 71;
+  if (courseTotalPar === 0 || courseTotalPar > 100) courseTotalPar = 70;
 
   await prisma.$transaction(async (tx) => {
     await tx.tournament.update({
@@ -140,7 +139,10 @@ export const closeTournamentByPeoriaDMN = async (req: Request, res: Response) =>
       for (const member of flight.members) {
         // ดึงคะแนนตรง 18 หลุมล่าสุดของนักกอล์ฟ
         const userScores = await tx.score.findMany({
-          where: { user_id: member.user_id },
+          where: { 
+            user_id: member.user_id,
+            flight_id: flight.flight_id
+          },
           include: { hole: true },
           orderBy: { hole: { hole_no: 'asc' } },
           take: 18

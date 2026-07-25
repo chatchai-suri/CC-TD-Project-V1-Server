@@ -1,3 +1,4 @@
+// src/controllers/scorer/scorer.controller.ts
 import type { Request, Response } from 'express';
 import { prisma } from '../../config/prisma.js';
 import { createError } from '../../utils/createError.js';
@@ -23,8 +24,20 @@ export const recordScores = async (req: Request, res: Response) => {
     const targetStroke = stroke !== undefined ? stroke : strokes;
     const targetHoleId = hole_id ? Number(hole_id) : holeMap.get(Number(hole_no));
 
-    if (!targetHoleId || targetStroke === null || targetStroke === undefined) return;
+    if (!targetHoleId) return;
 
+    // 🟢 กรณีที่ 1: หน้าบ้านสั่งล้างแต้ม (stroke === null) ให้ลบออกจาก DB
+    if (targetStroke === null || targetStroke === undefined) {
+      return prisma.score.deleteMany({
+        where: {
+          flight_id: Number(flight_id),
+          user_id: Number(user_id),
+          hole_id: Number(targetHoleId)
+        }
+      });
+    }
+
+    // 🟢 กรณีที่ 2: มีแต้มคีย์เข้ามา ให้สั่ง UPSERT บันทึกลง DB
     const existing = await prisma.score.findFirst({
       where: {
         flight_id: Number(flight_id),
@@ -110,14 +123,12 @@ export const getGolferSummary = async (req: Request, res: Response) => {
 
 // 🎯 GET: api/v1/scorer/my-flight (ค้นหาก๊วนประจำตัวผู้เล่น/Scorer ที่ล็อกอินอยู่)
 export const getMyFlight = async (req: Request, res: Response) => {
-  // 📥 รับ user_id จาก Token หรือ Query Parameter
   const userId = (req as any).user?.user_id || req.query.user_id;
 
   if (!userId || isNaN(Number(userId))) {
     throw createError(400, "ไม่สามารถดึงข้อมูลก๊วนได้: ไม่พบรหัส user_id ครับป๋า!");
   }
 
-  // 🏗️ ค้นหาก๊วนล่าสุดที่สังกัดอยู่ (เรียงตามลำดับล่าสุด)
   const memberRecord = await prisma.flightMember.findFirst({
     where: { user_id: Number(userId) },
     orderBy: { flight_member_id: 'desc' },
@@ -139,7 +150,6 @@ export const getMyFlight = async (req: Request, res: Response) => {
     throw createError(404, "นักกอล์ฟท่านนี้ยังไม่ได้จัดลงก๊วนใดๆ ในสนามครับป๋า!");
   }
 
-  // 📤 ดึงข้อมูลหลุม (Holes) และ คะแนนดิบเดิม (Scores) ของก๊วนนี้
   const holes = await prisma.hole.findMany({
     where: { section: { course_id: memberRecord.flight.tournament.course_id } },
     orderBy: { hole_no: 'asc' }
