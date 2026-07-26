@@ -11,11 +11,19 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || "8500"; // ใช้พอร์ตจาก .env หรือดีฟอลต์เป็น 8500 แต่ลองแก้ดีฟอลต์เป็น "" 
-const HOST = process.env.HOST || "localhost"; // หากไม่มีค่าใน env ให้ถอยกลับมา localhost ปลอดภัยไว้ก่อน
+// const HOST = process.env.HOST || "localhost"; // หากไม่มีค่าใน env ให้ถอยกลับมา localhost ปลอดภัยไว้ก่อน
+const HOST = process.env.HOST || "0.0.0.0"; // 🟢 ปลอดภัยแน่นอน! รับฟังทุก network interface
 
 app.use(express.json());
-app.use(cors());
-app.use(helmet());
+
+// 🔓 ปลดล็อก CORS ให้ยิงได้จากทุกโดเมนชั่วคราว
+app.use(cors({
+  origin: '*',
+  credentials: true
+}));
+
+// ⚠️ คอมเมนต์ helmet ทิ้งชั่วคราว ป้องกันไม่ให้บล็อก Cloudflare Cross-Origin
+// app.use(helmet());
 
 // 🎯 สเต็ป 3: เส้นทางทดสอบสุขภาพหน้าด่านระดับพื้นฐาน (ใช้เช็คว่าเซิร์ฟเวอร์ตื่นหรือยัง)
 app.get('/', (req, res) => {
