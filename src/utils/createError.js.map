@@ -1,0 +1,1 @@
+{"version":3,"file":"createError.js","sourceRoot":"","sources":["createError.ts"],"names":[],"mappings":"AAAA,2BAA2B;AAC3B;;;GAGG;AAMH;;;;GAIG;AACH,MAAM,UAAU,WAAW,CAAC,UAAkB,EAAE,OAAe;IAC7D,MAAM,KAAK,GAAgB,IAAI,KAAK,CAAC,OAAO,CAAC,CAAC;IAC9C,KAAK,CAAC,UAAU,GAAG,UAAU,CAAC;IAC9B,OAAO,KAAK,CAAC;AACf,CAAC"}

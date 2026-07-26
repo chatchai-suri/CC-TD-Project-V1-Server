@@ -1,3 +1,4 @@
+// Golf-TD-Server/prisma/seed.ts
 import { PrismaClient, Role } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
@@ -30,7 +31,7 @@ async function main() {
 
   console.log('👥 บรรจุ User พร้อม Plain Password "123456"...');
   
-  // 👑 1. บัญชี Papoo สิทธิ์ SCORER (เพื่อเข้าหน้าคีย์แต้มได้ทันที)
+  // 👑 1. บัญชี Papoo สิทธิ์ TD
   const uPapoo = await prisma.user.create({
     data: { fullname: "Chatchai Suriyawan", nickname: "Papoo", username: "papoo", password: plainPassword, global_role: Role.TD }
   });
@@ -60,11 +61,42 @@ async function main() {
   const sectionOut = await prisma.section.create({ data: { course_id: course.course_id, section_name: "Out (Hole 1-9)" } });
   const sectionIn = await prisma.section.create({ data: { course_id: course.course_id, section_name: "In (Hole 10-18)" } });
 
-  const parSpecs = [4,5,3,4,4,4,4,3,4, 4,5,3,4,4,4,4,3,4];
+  // ⛳ สเปก Par และ Handicap Index จริงของสนาม Amata Spring CC (White Tee - Par 72)
+  const amataHolesSpecs = [
+    // OUT (1-9) Par 36
+    { hole_no: 1, par: 4, index: 17 },
+    { hole_no: 2, par: 5, index: 9 },
+    { hole_no: 3, par: 4, index: 3 },
+    { hole_no: 4, par: 4, index: 1 },
+    { hole_no: 5, par: 3, index: 15 },
+    { hole_no: 6, par: 4, index: 13 },
+    { hole_no: 7, par: 5, index: 7 },
+    { hole_no: 8, par: 3, index: 11 },
+    { hole_no: 9, par: 4, index: 5 },
+
+    // IN (10-18) Par 36
+    { hole_no: 10, par: 4, index: 14 },
+    { hole_no: 11, par: 5, index: 18 },
+    { hole_no: 12, par: 4, index: 10 },
+    { hole_no: 13, par: 3, index: 16 },
+    { hole_no: 14, par: 4, index: 2 },
+    { hole_no: 15, par: 5, index: 8 },
+    { hole_no: 16, par: 4, index: 6 },
+    { hole_no: 17, par: 3, index: 12 },
+    { hole_no: 18, par: 4, index: 4 }
+  ];
+
   const holes: any[] = [];
-  for (let i = 1; i <= 18; i++) {
-    const s_id = i <= 9 ? sectionOut.section_id : sectionIn.section_id;
-    const h = await prisma.hole.create({ data: { section_id: s_id, hole_no: i, par: parSpecs[i-1] } });
+  for (const hSpec of amataHolesSpecs) {
+    const s_id = hSpec.hole_no <= 9 ? sectionOut.section_id : sectionIn.section_id;
+    const h = await prisma.hole.create({
+      data: {
+        section_id: s_id,
+        hole_no: hSpec.hole_no,
+        par: hSpec.par,
+        index: hSpec.index
+      }
+    });
     holes.push(h);
   }
 
@@ -93,7 +125,7 @@ async function main() {
     ]
   });
 
-  console.log('✅ Re-Seed Plain Text เรียบร้อย!');
+  console.log('✅ Re-Seed Amata Spring CC (Par 72) เรียบร้อยแล้วครับป๋าปู!');
 }
 
 main()
