@@ -140,20 +140,31 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
 
   if (isLive) {
     leaderboardData.sort((a, b) => {
+      // 1. เรียงตามจำนวนหลุมที่เล่นจบก่อน
       if (a.holes_played === 0 && b.holes_played > 0) return 1;
       if (b.holes_played === 0 && a.holes_played > 0) return -1;
 
+      // 2. เรียงตามคะแนน To Par
       if (a.total_to_par !== b.total_to_par) {
         return a.total_to_par - b.total_to_par;
       }
 
-      return b.holes_played - a.holes_played;
+      // 3. เรียงตามจำนวนหลุมที่ตีไปแล้ว
+      if (a.holes_played !== b.holes_played) {
+        return b.holes_played - a.holes_played;
+      }
+
+      // 🟢 4. TIE-BREAK: ถ้าทุกอย่างเท่ากันหมด ให้คนรหัสมาก่อน (ผู้เล่นคนแรก) อยู่บรรทัดบนเสมอ!
+      return a.user_id - b.user_id;
     });
   } else {
     leaderboardData.sort((a, b) => {
+      // ฝั่ง FINAL/NET
       if (a.net !== b.net) return a.net - b.net;
       if (a.handicap !== b.handicap) return a.handicap - b.handicap;
-      return (b.age || 0) - (a.age || 0);
+      
+      // 🟢 TIE-BREAK: กรณี NET และ HD เท่ากัน ให้คนรหัสมาก่อนอยู่บรรทัดบน
+      return a.user_id - b.user_id;
     });
   }
 
@@ -169,6 +180,16 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
     currentRank++;
   });
 
+// 🟢 1. ตรวจสอบกติกาแมตช์จริงจาก DB (รองรับทั้ง NO-HD, NO_HD, GROSS, STROKE PLAY)
+  const mode = (tournament.tournament_mode || "NO-HD").toUpperCase();
+  const isNoHd = mode.includes("NO-HD") || mode.includes("NO_HD") || mode.includes("GROSS") || mode === "STROKE PLAY";
+
+  // 🟢 2. คำนวณข้อความ Rule ให้ตรงตามความเป็นจริง
+  let ruleText = tournament.use_age_option ? "Peoria-DMN (Hybrid Age)" : "Peoria-DMN System";
+  if (isNoHd) {
+    ruleText = "Gross Only (NO-HD)";
+  }
+
   // 📝 Log ส่องดู Master Holes รายสนามใน Terminal ฝั่ง Server
   console.log(`⛳ [Express Server] Fetched Master Holes for Tournament ID ${tournament_id}: Total Holes = ${masterHolesList.length}`);
 
@@ -177,39 +198,95 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
     tournament_name: tournament.tournament_name,
     status: tournament.status,
     par: realTotalCoursePar,
-    handicap_rule: tournament.use_age_option ? "Peoria-DMN (Hybrid Age)" : "Peoria-DMN System",
-    peoria_hidden_holes: isLive ? "??, ??, ??, ??, ??, ??" : (tournament.peoria_holes || "ยังไม่มีการเฉลย"),
-    holes: masterHolesList, // 🟢 พ่วง Master Holes 18 หลุมของสนามส่งกลับไป
+    // 🟢 3. ส่ง tournament_mode และ handicap_rule แบบ Dynamic
+    tournament_mode: tournament.tournament_mode || "NO-HD",
+    handicap_rule: ruleText,
+    peoria_hidden_holes: isNoHd 
+      ? null 
+      : (isLive ? "??, ??, ??, ??, ??, ??" : (tournament.peoria_holes || "ยังไม่มีการเฉลย")),
+    holes: masterHolesList,
     leaderboard: leaderboardData
   });
 };
 
 export const getPlayerScoreCard = async (req: Request, res: Response) => {
   const { userId } = req.params;
+  const tournamentId = req.query.tournament_id;
 
   if (!userId || isNaN(Number(userId))) {
     throw createError(400, "กรุณาระบุรหัสผู้ใช้งานให้ถูกต้องครับป๋า!");
   }
 
+  // 1. ดึงคะแนนทั้งหมดของผู้เล่น โดยกรอง tournament_id ผ่าน relation ของ flight
   const scores = await prisma.score.findMany({
     where: {
-      user_id: Number(userId)
+      user_id: Number(userId),
+      ...(tournamentId && !isNaN(Number(tournamentId)) 
+        ? { flight: { tournament_id: Number(tournamentId) } } // 👈 แก้ตรงนี้! กรองผ่าน flight relation
+        : {})
     },
     include: { hole: true },
-    orderBy: { hole: { hole_no: 'asc' } },
+    orderBy: { recorded_at: 'desc' }
+  });
+
+  // 2. กรองเอาเฉพาะ Unique Hole No. (เอาค่าล่าสุด)
+  const scoreMap = new Map();
+  scores.forEach(s => {
+    const holeNo = s.hole?.hole_no;
+    if (holeNo && !scoreMap.has(holeNo)) {
+      scoreMap.set(holeNo, s);
+    }
+  });
+
+  // 3. ดึง Master Holes ทั้งหมด 18 หลุมของสนาม
+  let courseId: number | undefined;
+  if (tournamentId && !isNaN(Number(tournamentId))) {
+    const t = await prisma.tournament.findUnique({
+      where: { tournament_id: Number(tournamentId) },
+      select: { course_id: true }
+    });
+    courseId = t?.course_id;
+  }
+
+  const masterHoles = await prisma.hole.findMany({
+    where: courseId ? { section: { course_id: courseId } } : undefined,
+    orderBy: { hole_no: 'asc' },
     take: 18
   });
 
-  const hole_scores = scores.map(s => ({
-    hole_no: s.hole.hole_no,
-    par: s.hole.par,
-    stroke: s.strokes,
-    strokes: s.strokes,
-    index: s.hole.index
-  }));
+  const hole_scores = masterHoles.map(mHole => {
+    const userScore = scoreMap.get(mHole.hole_no);
+    return {
+      hole_id: mHole.hole_id,
+      hole_no: mHole.hole_no,
+      par: mHole.par,
+      index: mHole.index || mHole.hole_no,
+      stroke: userScore ? Number(userScore.strokes) : 0,
+      strokes: userScore ? Number(userScore.strokes) : 0
+    };
+  });
 
   return res.status(200).json({
     success: true,
     hole_scores
+  });
+};
+
+// 🎯 MODULE: ดึงรายชื่อนักกอล์ฟ/ผู้ใช้งานทั้งหมดในระบบ
+export const getAllUsers = async (req: Request, res: Response) => {
+  const users = await prisma.user.findMany({
+    select: {
+      user_id: true,
+      username: true,
+      fullname: true,
+      nickname: true,
+      global_role: true
+    },
+    orderBy: { user_id: 'asc' }
+  });
+
+  return res.status(200).json({
+    success: true,
+    data: users
   });
 };
