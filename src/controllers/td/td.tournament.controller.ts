@@ -10,7 +10,7 @@ import { createError } from '../../utils/createError.js';
 export const getAllTournaments = async (req: Request, res: Response) => {
   const tournaments = await prisma.tournament.findMany({
     include: {
-      course: true // 👈 Include ข้อมูลสนาม ให้ได้ course_name สดๆ จาก DB
+      course: true // 👈 [Fix]: Include ข้อมูลสนาม ให้ได้ course_name สดๆ จาก DB ส่งออก JSON
     },
     orderBy: { created_at: 'desc' }
   });
@@ -48,7 +48,7 @@ export const registerTournament = async (req: Request, res: Response) => {
       status: "setup"
     },
     include: {
-      course: true // 👈 Include ข้อมูลสนาม ส่งกลับทันทีหลังสร้าง
+      course: true // 👈 [Fix]: Include ข้อมูลสนาม ส่งกลับทันทีหลังสร้าง
     }
   });
 
@@ -91,13 +91,13 @@ export const updateTournament = async (req: Request, res: Response) => {
     where: { tournament_id: tournamentIdNum },
     data: {
       ...(tournament_name && { tournament_name }),
-      ...(course_id && { course_id: Number(course_id) }), // 👈 บันทึก course_id ใหม่ลง DB
+      ...(course_id && { course_id: Number(course_id) }),
       ...(event_date && { event_date: new Date(event_date) }),
       ...(tournament_mode && { tournament_mode }),
       ...(use_age_option !== undefined && { use_age_option: Boolean(use_age_option) })
     },
     include: {
-      course: true // 👈 Include ข้อมูลสนามตัวใหม่ เพื่อให้ Frontend อัปเดตชื่อสนามทันที
+      course: true // 👈 [Fix]: Include ข้อมูลสนามตัวใหม่ เพื่อให้ Frontend อัปเดตชื่อสนามทันที
     }
   });
 
