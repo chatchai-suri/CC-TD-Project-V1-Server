@@ -13,7 +13,8 @@ import {
   getTournamentLeaderboard, 
   closeTournament,
   reopenTournamentToLive,
-  updateTournamentStatus
+  updateTournamentStatus,
+  getAllTournaments
 } from '../controllers/td/td.tournament.controller.js';
 import {
   registerCourse,
@@ -32,6 +33,7 @@ tdRouter.put('/courses/:course_id', updateCourse);
 tdRouter.delete('/courses/:course_id', deleteCourse);
 
 // 🏆 Tournament Resources (CRUD)
+tdRouter.get("/tournaments", getAllTournaments);
 tdRouter.post('/tournaments', registerTournament);                                 // Create
 tdRouter.put('/tournaments/:tournament_id', updateTournament);                     // Update
 tdRouter.delete('/tournaments/:tournament_id', deleteTournament);                  // Delete
