@@ -3,17 +3,34 @@ import { Request, Response } from 'express';
 import { prisma } from '../../config/prisma.js';
 import { createError } from '../../utils/createError.js';
 
+// =========================================================================
+// 🎯 MODULE 1: ดึงรายการทัวร์นาเมนต์ทั้งหมดฝั่งนักกอล์ฟ (Get All Tournaments for Golfer)
+// 📌 API Path: GET /api/v1/user/tournaments
+// =========================================================================
 export const getAllTournaments = async (req: Request, res: Response) => {
   const tournamentData = await prisma.tournament.findMany({
+    include: {
+      course: true // 👈 Include ข้อมูลสนาม เพื่อให้ได้ course_name สดๆ จาก DB
+    },
     orderBy: { event_date: 'desc' },
   });
 
+  // 🗺️ Format ข้อมูลเพื่อการันตีว่ามี course_name ส่งออกแน่ๆ
+  const formattedData = tournamentData.map((t) => ({
+    ...t,
+    course_name: t.course?.course_name || "-"
+  }));
+
   return res.status(200).json({
     success: true,
-    data: tournamentData
+    data: formattedData
   });
 };
 
+// =========================================================================
+// 🎯 MODULE 2: ดึงข้อมูลกระดานผู้นำสาธารณะ (Get Public Leaderboard & Master Holes)
+// 📌 API Path: GET /api/v1/user/tournament/:tournament_id/leaderboard
+// =========================================================================
 export const getPublicLeaderboard = async (req: Request, res: Response) => {
   const { tournament_id } = req.params;
 
@@ -22,7 +39,10 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
   }
 
   const tournament = await prisma.tournament.findUnique({
-    where: { tournament_id: Number(tournament_id) }
+    where: { tournament_id: Number(tournament_id) },
+    include: {
+      course: true // 👈 Include ข้อมูลสนามสำหรับหัว Leaderboard & ScoringPanel
+    }
   });
 
   if (!tournament) {
@@ -75,6 +95,10 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
 
   let leaderboardData: any[] = [];
 
+  // 🟢 [Fix issue HD=0]: ตรวจสอบกติกาแบบ Mode ชัดเจน
+  const mode = String(tournament.tournament_mode || "NO-HD").toUpperCase();
+  const isGrossOnlyMode = mode === "3" || mode.includes("NO-HD") || mode.includes("NO_HD") || mode.includes("GROSS") || mode === "STROKE PLAY";
+
   flights.forEach(flight => {
     const flightScores = flight.scores || [];
 
@@ -117,8 +141,12 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
       else if (totalToPar === 0) displayToPar = "E";
       else if (totalToPar > 0) displayToPar = `+${totalToPar}`;
 
-      const hdValue = Number(member.calculated_hd || 0);
-      const netValue = Number(member.calculated_net || totalGross);
+      // 🟢 [Fix issue HD=0]: ถ้าเป็น Gross Only Mode หรือสถานะเป็น Live บังคับให้ HD = 0
+      const rawHdValue = Number(member.calculated_hd || 0);
+      const hdValue = (isGrossOnlyMode || isLive) ? 0 : rawHdValue;
+      
+      // ถ้าเป็น Gross Only Mode ค่า Net จะเท่ากับ Gross เสมอ
+      const netValue = isGrossOnlyMode ? totalGross : Number(member.calculated_net || (totalGross - hdValue));
 
       leaderboardData.push({
         user_id: golfer.user_id,
@@ -132,38 +160,32 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
         total_gross: totalGross,
         total_to_par: totalToPar,
         display_to_par: displayToPar,
-        handicap: isLive ? 0 : hdValue,
-        net: isLive ? totalGross : netValue
+        handicap: hdValue,
+        net: netValue
       });
     });
   });
 
   if (isLive) {
     leaderboardData.sort((a, b) => {
-      // 1. เรียงตามจำนวนหลุมที่เล่นจบก่อน
       if (a.holes_played === 0 && b.holes_played > 0) return 1;
       if (b.holes_played === 0 && a.holes_played > 0) return -1;
 
-      // 2. เรียงตามคะแนน To Par
       if (a.total_to_par !== b.total_to_par) {
         return a.total_to_par - b.total_to_par;
       }
 
-      // 3. เรียงตามจำนวนหลุมที่ตีไปแล้ว
       if (a.holes_played !== b.holes_played) {
         return b.holes_played - a.holes_played;
       }
 
-      // 🟢 4. TIE-BREAK: ถ้าทุกอย่างเท่ากันหมด ให้คนรหัสมาก่อน (ผู้เล่นคนแรก) อยู่บรรทัดบนเสมอ!
       return a.user_id - b.user_id;
     });
   } else {
     leaderboardData.sort((a, b) => {
-      // ฝั่ง FINAL/NET
       if (a.net !== b.net) return a.net - b.net;
       if (a.handicap !== b.handicap) return a.handicap - b.handicap;
       
-      // 🟢 TIE-BREAK: กรณี NET และ HD เท่ากัน ให้คนรหัสมาก่อนอยู่บรรทัดบน
       return a.user_id - b.user_id;
     });
   }
@@ -180,28 +202,24 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
     currentRank++;
   });
 
-// 🟢 1. ตรวจสอบกติกาแมตช์จริงจาก DB (รองรับทั้ง NO-HD, NO_HD, GROSS, STROKE PLAY)
-  const mode = (tournament.tournament_mode || "NO-HD").toUpperCase();
-  const isNoHd = mode.includes("NO-HD") || mode.includes("NO_HD") || mode.includes("GROSS") || mode === "STROKE PLAY";
-
-  // 🟢 2. คำนวณข้อความ Rule ให้ตรงตามความเป็นจริง
+  // 🟢 คำนวณข้อความ Rule ให้ตรงตาม Mode
   let ruleText = tournament.use_age_option ? "Peoria-DMN (Hybrid Age)" : "Peoria-DMN System";
-  if (isNoHd) {
+  if (isGrossOnlyMode) {
     ruleText = "Gross Only (NO-HD)";
   }
 
-  // 📝 Log ส่องดู Master Holes รายสนามใน Terminal ฝั่ง Server
   console.log(`⛳ [Express Server] Fetched Master Holes for Tournament ID ${tournament_id}: Total Holes = ${masterHolesList.length}`);
 
   return res.status(200).json({
     success: true,
     tournament_name: tournament.tournament_name,
+    course_name: tournament.course?.course_name || "-",
     status: tournament.status,
+    event_date: tournament.event_date || null, // 👈 [Fix issue dd]: ส่ง event_date ออกไปด้วยแล้วครับ!
     par: realTotalCoursePar,
-    // 🟢 3. ส่ง tournament_mode และ handicap_rule แบบ Dynamic
     tournament_mode: tournament.tournament_mode || "NO-HD",
     handicap_rule: ruleText,
-    peoria_hidden_holes: isNoHd 
+    peoria_hidden_holes: isGrossOnlyMode 
       ? null 
       : (isLive ? "??, ??, ??, ??, ??, ??" : (tournament.peoria_holes || "ยังไม่มีการเฉลย")),
     holes: masterHolesList,
@@ -209,6 +227,10 @@ export const getPublicLeaderboard = async (req: Request, res: Response) => {
   });
 };
 
+// =========================================================================
+// 🎯 MODULE 3: ดึงใบคะแนนรายบุคคล (Get Player Scorecard)
+// 📌 API Path: GET /api/v1/user/scorecard/:userId
+// =========================================================================
 export const getPlayerScoreCard = async (req: Request, res: Response) => {
   const { userId } = req.params;
   const tournamentId = req.query.tournament_id;
@@ -222,7 +244,7 @@ export const getPlayerScoreCard = async (req: Request, res: Response) => {
     where: {
       user_id: Number(userId),
       ...(tournamentId && !isNaN(Number(tournamentId)) 
-        ? { flight: { tournament_id: Number(tournamentId) } } // 👈 แก้ตรงนี้! กรองผ่าน flight relation
+        ? { flight: { tournament_id: Number(tournamentId) } }
         : {})
     },
     include: { hole: true },
@@ -272,7 +294,10 @@ export const getPlayerScoreCard = async (req: Request, res: Response) => {
   });
 };
 
-// 🎯 MODULE: ดึงรายชื่อนักกอล์ฟ/ผู้ใช้งานทั้งหมดในระบบ
+// =========================================================================
+// 🎯 MODULE 4: ดึงรายชื่อนักกอล์ฟ/ผู้ใช้งานทั้งหมดในระบบ (Get All Users)
+// 📌 API Path: GET /api/v1/user/all
+// =========================================================================
 export const getAllUsers = async (req: Request, res: Response) => {
   const users = await prisma.user.findMany({
     select: {

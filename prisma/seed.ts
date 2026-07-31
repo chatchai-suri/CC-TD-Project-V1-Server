@@ -91,10 +91,18 @@ async function main() {
   const pattaviaOut = await prisma.section.create({ data: { course_id: coursePattavia.course_id, section_name: "Out (Hole 1-9)" } });
   const pattaviaIn = await prisma.section.create({ data: { course_id: coursePattavia.course_id, section_name: "In (Hole 10-18)" } });
 
-  for (let i = 1; i <= 18; i++) {
-    const sId = i <= 9 ? pattaviaOut.section_id : pattaviaIn.section_id;
-    const defaultPar = (i === 3 || i === 8 || i === 13 || i === 17) ? 3 : (i === 5 || i === 11 || i === 15) ? 5 : 4;
-    await prisma.hole.create({ data: { section_id: sId, hole_no: i, par: defaultPar, index: i } });
+  const pattaviaHolesSpecs = [
+    { hole_no: 1, par: 4, index: 13 }, { hole_no: 2, par: 4, index: 9 }, { hole_no: 3, par: 5, index: 7 },
+    { hole_no: 4, par: 3, index: 17 }, { hole_no: 5, par: 4, index: 15 }, { hole_no: 6, par: 5, index: 1 },
+    { hole_no: 7, par: 3, index: 3 },  { hole_no: 8, par: 4, index: 5 }, { hole_no: 9, par: 4, index: 11 },
+    { hole_no: 10, par: 4, index: 16 }, { hole_no: 11, par: 4, index: 10 }, { hole_no: 12, par: 5, index: 4 },
+    { hole_no: 13, par: 3, index: 18 }, { hole_no: 14, par: 4, index: 12 }, { hole_no: 15, par: 4, index: 14 },
+    { hole_no: 16, par: 4, index: 2 },  { hole_no: 17, par: 3, index: 6 },  { hole_no: 18, par: 5, index: 8 }
+  ];
+
+  for (const hSpec of pattaviaHolesSpecs) {
+    const sId = hSpec.hole_no <= 9 ? pattaviaOut.section_id : pattaviaIn.section_id;
+    await prisma.hole.create({ data: { section_id: sId, hole_no: hSpec.hole_no, par: hSpec.par, index: hSpec.index } });
   }
 
   // 🏛️ สนามที่ 3: Khao Kheow CC (Course A-B)
@@ -103,12 +111,12 @@ async function main() {
   const kkIn = await prisma.section.create({ data: { course_id: courseKhaoKheow.course_id, section_name: "Course B (In 10-18)" } });
 
   const kkHolesSpecs = [
-    { hole_no: 1, par: 4, index: 11 }, { hole_no: 2, par: 4, index: 1 }, { hole_no: 3, par: 3, index: 17 },
-    { hole_no: 4, par: 4, index: 7 }, { hole_no: 5, par: 5, index: 3 }, { hole_no: 6, par: 4, index: 9 },
-    { hole_no: 7, par: 4, index: 13 }, { hole_no: 8, par: 3, index: 15 }, { hole_no: 9, par: 5, index: 5 },
-    { hole_no: 10, par: 4, index: 12 }, { hole_no: 11, par: 4, index: 2 }, { hole_no: 12, par: 3, index: 18 },
-    { hole_no: 13, par: 4, index: 8 }, { hole_no: 14, par: 5, index: 4 }, { hole_no: 15, par: 4, index: 10 },
-    { hole_no: 16, par: 4, index: 14 }, { hole_no: 17, par: 3, index: 16 }, { hole_no: 18, par: 5, index: 6 }
+    { hole_no: 1, par: 4, index: 17 }, { hole_no: 2, par: 5, index: 7 }, { hole_no: 3, par: 3, index: 13 },
+    { hole_no: 4, par: 4, index: 1 }, { hole_no: 5, par: 3, index: 15 }, { hole_no: 6, par: 4, index: 9 },
+    { hole_no: 7, par: 4, index: 11 }, { hole_no: 8, par: 5, index: 3 }, { hole_no: 9, par: 4, index: 5 },
+    { hole_no: 10, par: 4, index: 12 }, { hole_no: 11, par: 5, index: 6 }, { hole_no: 12, par: 3, index: 14 },
+    { hole_no: 13, par: 4, index: 10 }, { hole_no: 14, par: 4, index: 18 }, { hole_no: 15, par: 5, index: 8 },
+    { hole_no: 16, par: 4, index: 4 }, { hole_no: 17, par: 3, index: 16 }, { hole_no: 18, par: 4, index: 2 }
   ];
 
   for (const hSpec of kkHolesSpecs) {
