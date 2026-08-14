@@ -10,7 +10,7 @@ import { createError } from '../../utils/createError.js';
 export const getAllTournaments = async (req: Request, res: Response) => {
   const tournaments = await prisma.tournament.findMany({
     include: {
-      course: true // 👈 [Fix]: Include ข้อมูลสนาม ให้ได้ course_name สดๆ จาก DB ส่งออก JSON
+      course: true
     },
     orderBy: { created_at: 'desc' }
   });
@@ -48,7 +48,7 @@ export const registerTournament = async (req: Request, res: Response) => {
       status: "setup"
     },
     include: {
-      course: true // 👈 [Fix]: Include ข้อมูลสนาม ส่งกลับทันทีหลังสร้าง
+      course: true
     }
   });
 
@@ -97,7 +97,7 @@ export const updateTournament = async (req: Request, res: Response) => {
       ...(use_age_option !== undefined && { use_age_option: Boolean(use_age_option) })
     },
     include: {
-      course: true // 👈 [Fix]: Include ข้อมูลสนามตัวใหม่ เพื่อให้ Frontend อัปเดตชื่อสนามทันที
+      course: true
     }
   });
 
@@ -138,7 +138,6 @@ export const deleteTournament = async (req: Request, res: Response) => {
     const flightIds = flights.map(f => f.flight_id);
 
     if (flightIds.length > 0) {
-      // 🛡️ ป้องกัน Foreign Key Constraint ด้วยการลบ Score ล่วงหน้า
       await tx.score.deleteMany({ where: { flight_id: { in: flightIds } } });
       await tx.flightMember.deleteMany({ where: { flight_id: { in: flightIds } } });
       await tx.flight.deleteMany({ where: { tournament_id: tournamentIdNum } });
@@ -169,7 +168,7 @@ export const getTournamentLeaderboard = async (req: Request, res: Response) => {
   const tournament = await prisma.tournament.findUnique({
     where: { tournament_id: Number(tournament_id) },
     include: {
-      course: true // 👈 Include ข้อมูลสนาม สำหรับแสดงบนหัว Leaderboard
+      course: true
     }
   });
 
@@ -200,7 +199,7 @@ export const getTournamentLeaderboard = async (req: Request, res: Response) => {
 
 // =========================================================================
 // 🎯 MODULE 5: ปิดแมตช์คำนวณผล (รองรับทั้ง PEORIA และ NO-HD / GROSS ONLY)
-// 📌 API Path: POST /api/v1/td/tournaments/:tournament_id/close
+// 📌 API Path: PUT /api/v1/td/tournaments/:tournament_id/close
 // =========================================================================
 export const closeTournament = async (req: Request, res: Response) => {
   const tournament_id = req.params.tournament_id || req.body.tournament_id;
@@ -220,23 +219,19 @@ export const closeTournament = async (req: Request, res: Response) => {
     throw createError(404, "ไม่พบข้อมูลรายการแข่งขันนี้ในระบบคลังครับป๋า!");
   }
 
-  // 🟢 ตรวจสอบโหมดกติกาจาก DB
   const rawMode = String(tournament.tournament_mode || "").toUpperCase();
   const hasPeoriaHoles = Array.isArray(peoria_holes) && peoria_holes.length === 12;
 
-  // เป็น Gross Only (NO-HD) เมื่อ mode ระบุว่าเป็น 3 หรือ NO-HD/GROSS
   const isNoHd = rawMode === "3" || 
                  rawMode === "NO-HD" || 
                  rawMode === "NO_HD" || 
                  rawMode === "GROSS" || 
                  rawMode.includes("GROSS");
 
-  // ถ้าไม่ใช่ Gross Only แต่ไม่มีหลุมลับ 12 หลุมส่งมา -> ให้แจ้งเตือน error
   if (!isNoHd && !hasPeoriaHoles) {
     throw createError(400, "กติกา Peoria ล้มเหลว: ต้องระบุหลุมลับ (Secret Holes) ให้ครบถ้วน 12 หลุมครับ!");
   }
 
-  // ดึง Master Holes 18 หลุมตามสนาม
   const targetHoles = await prisma.hole.findMany({
     where: { section: { course_id: tournament.course_id } },
     orderBy: { hole_no: 'asc' },
@@ -247,18 +242,22 @@ export const closeTournament = async (req: Request, res: Response) => {
     ? targetHoles 
     : await prisma.hole.findMany({ take: 18, orderBy: { hole_no: 'asc' } });
 
-  let courseTotalPar = valid18Holes.reduce((sum, h) => sum + h.par, 0);
+  let courseTotalPar = valid18Holes.reduce((sum, h) => sum + Number(h.par || 4), 0);
   if (courseTotalPar === 0 || courseTotalPar > 100) courseTotalPar = 72;
 
-  const holeMap = new Map<number, { hole_no: number; par: number }>();
+  const holeMap = new Map<number, { hole_id: number; hole_no: number; par: number; index: number }>();
   valid18Holes.forEach(h => {
-    holeMap.set(h.hole_id, { hole_no: h.hole_no, par: h.par });
+    holeMap.set(h.hole_id, { 
+      hole_id: h.hole_id,
+      hole_no: Number(h.hole_no), 
+      par: Number(h.par || 4),
+      index: Number(h.index || 0)
+    });
   });
 
   const secretHoleNos = new Set(peoria_holes ? peoria_holes.map(Number) : []);
 
   await prisma.$transaction(async (tx) => {
-    // 1. อัปเดตสถานะทัวร์นาเมนต์เป็น final พร้อมบันทึกหลุมลับ
     await tx.tournament.update({
       where: { tournament_id: tournamentIdNum },
       data: {
@@ -274,7 +273,6 @@ export const closeTournament = async (req: Request, res: Response) => {
 
     const allFlightIds = flights.map(f => f.flight_id);
     
-    // 2. ดึงคะแนนสดทั้งหมดในแมตช์
     const allScores = await tx.score.findMany({
       where: { 
         flight_id: { in: allFlightIds },
@@ -284,7 +282,6 @@ export const closeTournament = async (req: Request, res: Response) => {
       orderBy: { recorded_at: 'desc' }
     });
 
-    // DEDUPLICATION: ดึงเฉพาะ Score ล่าสุดของแต่ละหลุม
     const userUniqueScoresMap = new Map<string, Map<number, any>>();
     
     allScores.forEach(score => {
@@ -294,19 +291,20 @@ export const closeTournament = async (req: Request, res: Response) => {
       }
       
       const holeInfo = score.hole || holeMap.get(score.hole_id);
-      const holeNo = holeInfo?.hole_no;
+      const holeNo = holeInfo ? Number(holeInfo.hole_no) : undefined;
       const userHoleMap = userUniqueScoresMap.get(key)!;
       
       if (holeNo && !userHoleMap.has(holeNo)) {
         userHoleMap.set(holeNo, {
+          score_id: score.score_id,
+          hole_id: score.hole_id,
           strokes: Number(score.strokes || 0),
           hole_no: holeNo,
-          par: holeInfo?.par || 4
+          par: score.hole ? Number(score.hole.par) : (holeMap.get(score.hole_id)?.par || 4)
         });
       }
     });
 
-    // 3. วนลูปประมวลผล HD / Net ให้สมาชิกทุกคน
     for (const flight of flights) {
       for (const member of flight.members) {
         const key = `${flight.flight_id}-${member.user_id}`;
@@ -317,14 +315,15 @@ export const closeTournament = async (req: Request, res: Response) => {
         let adjustedSecretGross = 0;
 
         userScores.forEach(score => {
-          const strokes = score.strokes;
-          const holeNo = score.hole_no;
-          const holePar = score.par;
+          const strokes = Number(score.strokes);
+          const holeNo = Number(score.hole_no);
+          const masterSpec = holeMap.get(score.hole_id);
+          const holePar = masterSpec ? masterSpec.par : Number(score.par || 4);
 
           totalGross += strokes;
           
           if (holeNo && secretHoleNos.has(holeNo)) {
-            const maxCap = holePar * 2; // Capping Double Par
+            const maxCap = holePar * 2;
             const cappedStroke = Math.min(strokes, maxCap);
             adjustedSecretGross += cappedStroke;
           }
@@ -333,15 +332,13 @@ export const closeTournament = async (req: Request, res: Response) => {
         let finalHd: number = 0;
         let finalNet: number = totalGross;
 
-        // 🎯 สูตร Peoria-DMN: ((ผลรวมสโตรก 12 หลุมลับ * 1.5) - Course Par) * 0.8
         if (!isNoHd) {
           let rawHd = ((adjustedSecretGross * 1.5) - courseTotalPar) * 0.8;
           if (rawHd < 0) rawHd = 0;
-          finalHd = Math.round(rawHd * 10) / 10; // ปัดเศษ 1 ตำแหน่ง
+          finalHd = Math.round(rawHd * 10) / 10;
           finalNet = Math.round((totalGross - finalHd) * 10) / 10;
         }
 
-        // 4. บันทึกผล HD และ NET ลงตาราง flight_members
         await tx.flightMember.update({
           where: {
             flight_id_user_id: {
@@ -367,7 +364,6 @@ export const closeTournament = async (req: Request, res: Response) => {
       : "🏆 คำนวณแต้มต่อ Peoria-DMN เรียบร้อยครับป๋า!"
   });
 };
-
 
 // =========================================================================
 // 🎯 MODULE 6: สลับแมตช์กลับเป็น LIVE
@@ -437,7 +433,7 @@ export const updateTournamentStatus = async (req: Request, res: Response) => {
     where: { tournament_id: tournamentIdNum },
     data: { status: normalizedStatus },
     include: {
-      course: true // 👈 Include ข้อมูลสนาม เพื่อให้หน้าจอรับสถานะและชื่อสนามล่าสุด
+      course: true
     }
   });
 

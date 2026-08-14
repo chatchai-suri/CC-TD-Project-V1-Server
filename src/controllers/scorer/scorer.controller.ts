@@ -3,21 +3,43 @@ import type { Request, Response } from 'express';
 import { prisma } from '../../config/prisma.js';
 import { createError } from '../../utils/createError.js';
 
-// 🎯 POST: api/v1/scorer/scores (ลอจิกการบันทึกสโตรกคะแนนดิบรายหลุม/ทั้งก๊วน)
+// =========================================================================
+// 🎯 MODULE 1: บันทึกสโตรกคะแนนสดรายหลุม/ทั้งก๊วน (Record Scores)
+// 📌 API Path: POST /api/v1/scorer/scores
+// =========================================================================
 export const recordScores = async (req: Request, res: Response) => {
   const { flight_id, scores } = req.body;
 
-  if (!flight_id) {
-    throw createError(400, "ไม่สามารถบันทึกแต้มได้: กรุณาระบุ flight_id ด้วยครับป๋าปู!");
+  if (!flight_id || isNaN(Number(flight_id))) {
+    throw createError(400, "ไม่สามารถบันทึกแต้มได้: กรุณาระบุรหัส flight_id ให้ถูกต้องด้วยครับป๋าปู!");
   }
 
   if (!scores || !Array.isArray(scores) || scores.length === 0) {
     throw createError(400, "ไม่สามารถบันทึกแต้มได้: ไม่พบรายการสโตรกคะแนนในพัสดุขาเข้าครับ!");
   }
 
-  const allHoles = await prisma.hole.findMany();
+  const flightIdNum = Number(flight_id);
+
+  // 🎯 ปฏิบัติตาม Rule ข้อ 8 เสาที่ 1: ดึง course_id ผ่าน flight_id -> tournament_id
+  const targetFlight = await prisma.flight.findUnique({
+    where: { flight_id: flightIdNum },
+    include: { tournament: true }
+  });
+
+  if (!targetFlight) {
+    throw createError(404, "ไม่พบข้อมูลก๊วนแข่งขันนี้ในระบบครับป๋าปู!");
+  }
+
+  const courseId = targetFlight.tournament.course_id;
+
+  // 🏛️ ดึง Master Holes เฉพาะสนามแข่งนี้เป็น Single Source of Truth
+  const targetCourseHoles = await prisma.hole.findMany({
+    where: { section: { course_id: courseId } },
+    orderBy: { hole_no: 'asc' }
+  });
+
   const holeMap = new Map<number, number>();
-  allHoles.forEach((h) => holeMap.set(h.hole_no, h.hole_id));
+  targetCourseHoles.forEach((h) => holeMap.set(h.hole_no, h.hole_id));
 
   const savePromises = scores.map(async (item: any) => {
     const { user_id, hole_no, hole_id, stroke, strokes } = item;
@@ -26,21 +48,21 @@ export const recordScores = async (req: Request, res: Response) => {
 
     if (!targetHoleId) return;
 
-    // 🟢 กรณีที่ 1: หน้าบ้านสั่งล้างแต้ม (stroke === null) ให้ลบออกจาก DB
+    // 🟢 กรณีที่ 1: สั่งล้างแต้ม (stroke === null/undefined)
     if (targetStroke === null || targetStroke === undefined) {
       return prisma.score.deleteMany({
         where: {
-          flight_id: Number(flight_id),
+          flight_id: flightIdNum,
           user_id: Number(user_id),
           hole_id: Number(targetHoleId)
         }
       });
     }
 
-    // 🟢 กรณีที่ 2: มีแต้มคีย์เข้ามา ให้สั่ง UPSERT บันทึกลง DB
+    // 🟢 กรณีที่ 2: มีแต้มคีย์เข้ามา สั่ง UPSERT
     const existing = await prisma.score.findFirst({
       where: {
-        flight_id: Number(flight_id),
+        flight_id: flightIdNum,
         user_id: Number(user_id),
         hole_id: Number(targetHoleId)
       }
@@ -54,7 +76,7 @@ export const recordScores = async (req: Request, res: Response) => {
     } else {
       return prisma.score.create({
         data: {
-          flight_id: Number(flight_id),
+          flight_id: flightIdNum,
           user_id: Number(user_id),
           hole_id: Number(targetHoleId),
           strokes: Number(targetStroke)
@@ -65,18 +87,21 @@ export const recordScores = async (req: Request, res: Response) => {
 
   await Promise.all(savePromises);
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     message: "สลักสโตรกคะแนนสดลงคลัง MySQL เรียบร้อยแล้วครับป๋าปู! ⛳💾"
   });
 };
 
-// 🎯 GET: api/v1/scorer/tournaments/:tournament_id/users/:user_id/summary (สรุปผลคะแนนรวมรายบุคคล)
+// =========================================================================
+// 🎯 MODULE 2: สรุปผลคะแนนรวมรายบุคคล (Get Golfer Summary)
+// 📌 API Path: GET /api/v1/scorer/tournaments/:tournament_id/users/:user_id/summary
+// =========================================================================
 export const getGolferSummary = async (req: Request, res: Response) => {
   const { tournament_id, user_id } = req.params;
 
-  if (!tournament_id || !user_id) {
-    throw createError(400, "ระเบียบข้อมูลไม่ครบถ้วน: กรุณาระบุ tournament_id และ user_id ด้วยครับป๋า!");
+  if (!tournament_id || !user_id || isNaN(Number(tournament_id)) || isNaN(Number(user_id))) {
+    throw createError(400, "ระเบียบข้อมูลไม่ครบถ้วน: กรุณาระบุ tournament_id และ user_id ให้ถูกต้องด้วยครับป๋า!");
   }
 
   const scores = await prisma.score.findMany({
@@ -110,7 +135,7 @@ export const getGolferSummary = async (req: Request, res: Response) => {
   if (totalToPar === 0) toParDisplay = "E";
   if (totalToPar > 0) toParDisplay = `+${totalToPar}`;
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     data: {
       holes_played: holesPlayed,
@@ -121,7 +146,10 @@ export const getGolferSummary = async (req: Request, res: Response) => {
   });
 };
 
-// 🎯 GET: api/v1/scorer/my-flight (ค้นหาก๊วนประจำตัวผู้เล่น/Scorer ที่ล็อกอินอยู่)
+// =========================================================================
+// 🎯 MODULE 3: ค้นหาก๊วนประจำตัวผู้เล่น/Scorer ที่ล็อกอินอยู่ (Get My Flight)
+// 📌 API Path: GET /api/v1/scorer/my-flight
+// =========================================================================
 export const getMyFlight = async (req: Request, res: Response) => {
   const userId = (req as any).user?.user_id || req.query.user_id;
 
@@ -159,7 +187,7 @@ export const getMyFlight = async (req: Request, res: Response) => {
     where: { flight_id: memberRecord.flight_id }
   });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     data: {
       flight: memberRecord.flight,
