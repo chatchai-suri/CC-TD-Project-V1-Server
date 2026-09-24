@@ -1,9 +1,17 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import fs from 'fs';
 
-// 🎯 ไม้ตายปิดฉากศึก: ป้อนก้อนพิมพ์เขียวตั้งค่ามุดท่อพอร์ต 3307 ให้ PrismaMariaDb ตรง ๆ เลยครับป๋า!
-// วิธีนี้ตัดการใช้คำสั่ง mariadb.createPool() ดักหน้าออกไป เส้นแดงหยักจะหายวับไปทันที 100%
+// 🎯 ถ้ามี DB_SSL_CA ใน .env จะเปิดโหมด SSL ให้อัตโนมัติ (สำหรับ Aiven)
+// ถ้าไม่มี (เช่นตอนต่อ Local pp2) จะข้ามส่วนนี้ไปเหมือนเดิม
+const sslConfig = process.env.DB_SSL_CA
+  ? {
+      ca: fs.readFileSync(process.env.DB_SSL_CA).toString(),
+      rejectUnauthorized: true,
+    }
+  : undefined;
+
 const adapter = new PrismaMariaDb({
   host: process.env.DB_HOST || '100.83.39.48',
   port: Number(process.env.DB_PORT) || 3307,
@@ -11,6 +19,7 @@ const adapter = new PrismaMariaDb({
   password: process.env.DB_PASSWORD || 'golf_root_password',
   database: process.env.DB_NAME || 'tournament_director_db',
   connectionLimit: 5,
+  ssl: sslConfig, // 🎯 เพิ่มบรรทัดนี้เข้าไป
 });
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
@@ -18,7 +27,7 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
-    adapter, // 🎯 ส่งอินสแตนซ์ที่ถูกต้องตามข้อกำหนดระบบ ผ่านฉลุยแน่นอนครับป๋า!
+    adapter,
     log: ['query', 'error', 'warn'],
   });
 
