@@ -16,14 +16,33 @@ const HOST = process.env.HOST || "0.0.0.0"; // 🟢 ปลอดภัยแน�
 
 app.use(express.json());
 
-// 🔓 ปลดล็อก CORS ให้ยิงได้จากทุกโดเมนชั่วคราว
-app.use(cors({
-  origin: '*',
-  credentials: true
+// ========================================================
+// 🛡️ 1. HELMET: ป้องกัน Header โจมตี (XSS, Clickjacking, Sniffing)
+// ========================================================
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // เปิดทางให้โหลด Avatar/Assets ข้ามโดเมนได้ไม่ติดบล็อก
 }));
 
-// ⚠️ คอมเมนต์ helmet ทิ้งชั่วคราว ป้องกันไม่ให้บล็อก Cloudflare Cross-Origin
-// app.use(helmet());
+// ========================================================
+// 🔒 2. STRICT CORS: ล็อกเฉพาะโดเมนของระบบที่อนุญาตเท่านั้น
+// ========================================================
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://golf-td.chatchaidev.com'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // ยอมรับคำขอที่ไม่มี origin (เช่น Postman, cURL, Mobile apps) หรือ origin ที่ระบุใน Whitelist
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Blocked by CORS policy: Origin not allowed'));
+    }
+  },
+  credentials: true
+}));
 
 // 🎯 สเต็ป 3: เส้นทางทดสอบสุขภาพหน้าด่านระดับพื้นฐาน (ใช้เช็คว่าเซิร์ฟเวอร์ตื่นหรือยัง)
 app.get('/', (req, res) => {
