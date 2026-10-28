@@ -1,22 +1,14 @@
 // src/controllers/auth/auth.controller.ts
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../../config/prisma.js'; // 🔁 นำเข้า Instance ฐานข้อมูลพ่วง .js ตามกฎข้อที่ 3 ของสโมสร
-import { createError } from '../../utils/createError.js'; // 🔁 ตัวดักจับข้อผิดพลาดส่วนกลางที่ป๋าปูวางท่อไว้
+import jwt from 'jsonwebtoken';
+import { prisma } from '../../config/prisma.js';
+import { createError } from '../../utils/createError.js';
+import { hashPassword, verifyPassword } from '../../utils/password.util.js';
 
-/**
- * 🎯 POST: /api/v1/auth/register (ลอจิกการลงทะเบียนนักกอล์ฟและแคดดี้เข้าระบบ)
- * 🔒 เลเยอร์ 4 ชั้น Express v5 Compliance ปราศจาก Try-Catch บวมรกสายตา
- */
 export const registerUser = async (req: Request, res: Response, next: NextFunction) => {
-  // 📥 4.1 Request Management: แกะห่อพัสดุรับช่วงข้อมูลขาเข้า
   const { username, password, fullname, nickname, phone_number, age } = req.body;
 
-  // 🛡️ 4.2 Validation & 4.3 Error Handling: ด่านตรวจสัญญาณเด็ดขาด
-  if (!fullname) {
-    throw createError(400, "ไม่สามารถลงทะเบียนได้: กรุณาระบุชื่อ-นามสกุลจริงด้วยครับป๋า!");
-  }
-
-  // ดักจับรายชื่อยูสเซอร์เนมซ้ำซ้อนระดับชั้นแอปพลิเคชัน (Strict checking)
+  // 1. ตรวจสอบ Username ซ้ำ
   if (username) {
     const existingUser = await prisma.user.findUnique({ where: { username } });
     if (existingUser) {
@@ -24,23 +16,25 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
     }
   }
 
-  // 🏗️ 4.4 Action Steps: สลักข้อมูลลงตู้ MySQL ผ่านอุโมงค์พอร์ต 3307
+  // 2. แฮชรหัสผ่านด้วย Argon2
+  const hashedPassword = password ? await hashPassword(password) : null;
+
+  // 3. บันทึกลงฐานข้อมูล
   const newUser = await prisma.user.create({
     data: {
       username: username || null,
-      password: password || null, // 👈 เฟสแรกคงสายอักขระดิบตามความต้องการของป๋าปูเพื่อพรูฟ Data Flow
+      password: hashedPassword,
       fullname,
       nickname: nickname || null,
       phone_number: phone_number || null,
-      age: age ? Number(age) : null, // 👈 มั่นใจว่าเป็นสัญญานประเภท Int ป้องกัน Type หลังบ้านเพี้ยน
-      global_role: "GOLFER" // 👈 ค่าเริ่มต้นสากลนิยมฝั่งโมดูลผู้เล่น
+      age: age ?? null,
+      global_role: "GOLFER"
     }
   });
 
-  // 📤 4.n+1 Response Management: ส่งข้อมูลสถานะสีเขียวสำเร็จกลับไปกางตารางหน้าบ้าน
   return res.status(201).json({
     success: true,
-    message: `สลักชื่อนักกอล์ฟ "${fullname}" เข้าสู่ระบบท่อฐานข้อมูลเรียบร้อยแล้วครับป๋า! 🏌️‍♂️`,
+    message: `สลักชื่อนักกอล์ฟ "${fullname}" เข้าสู่ระบบเรียบร้อยแล้วครับ! 🏌️‍♂️`,
     data: {
       user_id: newUser.user_id,
       username: newUser.username,
@@ -49,43 +43,45 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
   });
 };
 
-/**
- * 🎯 POST: /api/v1/auth/login (ลอจิกดักเช็คพาสเวิร์ดเพื่อแจกตั๋วสิทธิ์ควบคุม)
- * 🔒 เลเยอร์ 4 ชั้น Express v5 Compliance ไหลคลีนจากบนลงล่าง
- */
 export const login = async (req: Request, res: Response, next: NextFunction) => {
-  // 📥 4.1 Request Management
   const { username, password } = req.body;
 
-  // 🛡️ 4.2 Validation & 4.3 Error Handling
-  if (!username || !password) {
-    throw createError(400, "กรุณากรอก username และ password ให้ครบถ้วนด้วยครับป๋า");
-  }
-
-  // 🏗️ 4.4 Action Steps: ค้นหาชื่อยูสเซอร์ในถัง MySQL ผ่านเครือข่ายความปลอดภัย
+  // 1. ค้นหาผู้ใช้
   const user = await prisma.user.findUnique({
-    where: { username: username },
+    where: { username },
   });
 
-  // ⚠️ หากควานหาในตู้ฐานข้อมูลแล้วไม่พบชื่อผู้ใช้งาน ให้โยน Error ทันที
-  if (!user) {
-    throw createError(404, "ไม่พบชื่อผู้ใช้งานนี้ในระบบคลับครับป๋า!");
+  if (!user || !user.password) {
+    throw createError(400, "ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้องครับ!");
   }
 
-  // ตรวจสอบรหัสผ่านสายอักขระดิบเคลียร์หน้างานช่วงตั้งไข่
-  if (user.password !== password) {
-    throw createError(400, "รหัสผ่านไม่ถูกต้อง กรุณาเช็ควงสวิงอีกครั้งครับป๋า!");
+  // 2. ตรวจสอบรหัสผ่านด้วย Argon2 Verify
+  const isMatch = await verifyPassword(user.password, password);
+  if (!isMatch) {
+    throw createError(400, "ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้องครับ!");
   }
 
-  // 📤 4.n+1 Response Management: ผ่านฉลุย ส่งสิทธิ์กลับไปกางปุ่มหน้าบ้าน React
+  // 3. ออก JWT Token
+  const token = jwt.sign(
+    { 
+      user_id: user.user_id, 
+      username: user.username, 
+      global_role: user.global_role 
+    },
+    process.env.JWT_SECRET || 'golf_td_dev_secret_key_2026',
+    { expiresIn: '7d' }
+  );
+
   return res.status(200).json({
     success: true,
-    message: `ยินดีต้อนรับกลับสู่สนามครับ ป๋าได้สิทธิ์ในฐานะ [${user.global_role}] ⛳`,
+    message: `ยินดีต้อนรับกลับสู่สนามครับ [${user.global_role}] ⛳`,
+    token,
     data: {
       user_id: user.user_id,
       username: user.username,
       fullname: user.fullname,
-      global_role: user.global_role
+      global_role: user.global_role,
+      profile_icon: user.profile_icon
     }
   });
 };
