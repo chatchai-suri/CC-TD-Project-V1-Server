@@ -7,6 +7,8 @@ export interface AuthPayload {
   user_id: number;
   username: string;
   global_role: string;
+  fullname?: string;
+  profile_icon?: string | null;
 }
 
 // 🛡️ ขยาย Type ของ Express Request ให้รู้จัก req.user ป้องกันเส้นแดง Linter

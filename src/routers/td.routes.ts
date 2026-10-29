@@ -22,10 +22,14 @@ import {
   updateCourse,
   deleteCourse
 } from '../controllers/td/td.course.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
+
 const tdRouter = Router();
 
-// ENDPOINTS Base: http://100.65.78.122:8500/api/v1/td
+// 🔒 ด่านตรวจกลาง: ล็อกทุก Endpoint ภายใต้ /api/v1/td ให้เฉพาะ TD และ ADMIN เท่านั้น
+tdRouter.use(authenticate, authorize('TD', 'ADMIN'));
 
+// บรรทัดข้างล่างนี้ทั้งหมด (GET, POST, PUT, DELETE) จะปลอดภัยโดยอัตโนมัติ 100%
 // ⛳ Course Management (เพิ่มส่วนนี้เข้ามาครับ)
 tdRouter.post('/courses', registerCourse);
 tdRouter.get('/courses', getAllCourses);
