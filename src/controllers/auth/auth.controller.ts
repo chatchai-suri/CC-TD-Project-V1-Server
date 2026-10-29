@@ -66,7 +66,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     { 
       user_id: user.user_id, 
       username: user.username, 
-      global_role: user.global_role 
+      fullname: user.fullname,       // 👈 เติมลงใน Payload
+      global_role: user.global_role,
+      profile_icon: user.profile_icon // 👈 เติมลงใน Payload
     },
     process.env.JWT_SECRET || 'golf_td_dev_secret_key_2026',
     { expiresIn: '7d' }
