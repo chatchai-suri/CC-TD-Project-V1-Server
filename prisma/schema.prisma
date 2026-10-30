@@ -1,20 +1,11 @@
-datasource db {
-  provider = "mysql"
-}
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// 0.1. ยัด Enum ประกาศสิทธิ์ 4 ขุนพลไว้ล่างสุดหรือบนสุดของไฟล์
-enum Role {
-  ADMIN
-  TD
-  SCORER
-  GOLFER
+datasource db {
+  provider = "mysql"
 }
 
-// 1. ตารางผู้ใช้งานระบบ (ชื่อในตู้ MySQL คือ "users")
 model User {
   user_id        Int            @id @default(autoincrement())
   username       String?        @unique
@@ -22,139 +13,128 @@ model User {
   fullname       String
   nickname       String?
   phone_number   String?
-  age            Int?           
-  global_role    Role           @default(GOLFER) // 👈 เปลี่ยนเป็น Role และถอดเครื่องหมายคำพูดออก
-  // 👑 งอกคอลัมน์ไอคอนโปรไฟล์จำลอง รองรับระบบ Cloudinary และการแสดงผลบน Mobile
-  profile_icon   String?        @default("https://api.dicebear.com/7.x/adventurer/svg?seed=porn")
+  age            Int?
+  global_role    Role           @default(GOLFER)
   created_at     DateTime       @default(now())
-  updated_at     DateTime       @default(now()) @updatedAt // 👈 🎯 ดักจับบั๊กข้อมูลเก่าค้างแคช
-
-  // Relations (สายสัญญาณเดินเรดาร์ย้อนศรสากลนิยม)
+  updated_at     DateTime       @default(now()) @updatedAt
+  profile_icon   String?        @default("https://api.dicebear.com/7.x/adventurer/svg?seed=porn")
   flights_joined FlightMember[]
-  scores         Score[]        // 👈 🎯 งอกอัตโนมัติรองรับตาราง Score แบบ 3 ประสาน
+  scores         Score[]
 
-  @@map("users") // 👈 🎯 เปลี่ยนชื่อตารางใน MySQL pp1 ให้เป็นพหูพจน์สากล
+  @@map("users")
 }
 
-// 2. ตารางสนามกอล์ฟ
 model Course {
   course_id   Int          @id @default(autoincrement())
   course_name String
   location    String?
   created_at  DateTime     @default(now())
   updated_at  DateTime     @default(now()) @updatedAt
-
-  // Relations
   sections    Section[]
   tournaments Tournament[]
 
   @@map("courses")
 }
 
-// 3. ตารางฝั่งของสนาม ( Mountain / Ocean )
 model Section {
   section_id   Int      @id @default(autoincrement())
   course_id    Int
-  section_name String   
+  section_name String
   created_at   DateTime @default(now())
   updated_at   DateTime @default(now()) @updatedAt
-
-  // Relations
-  course       Course   @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
   holes        Hole[]
+  course       Course   @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
 
+  @@index([course_id], map: "sections_course_id_fkey")
   @@map("sections")
 }
 
-// 4. ตารางข้อมูลแม่แบบหลุมกอล์ฟ 1-18
 model Hole {
   hole_id    Int      @id @default(autoincrement())
   section_id Int
-  hole_no    Int     
-  par        Int     
-  index      Int?    
+  hole_no    Int
+  par        Int
+  index      Int?
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
-
-  // Relations
   section    Section  @relation(fields: [section_id], references: [section_id], onDelete: Cascade)
-  scores     Score[]  // 👈 🎯 งอกอัตโนมัติรองรับสะพานสายตรงของตาราง Score
+  scores     Score[]
 
+  @@index([section_id], map: "holes_section_id_fkey")
   @@map("holes")
 }
 
-// 5. ตารางแมตช์การแข่งขัน
 model Tournament {
   tournament_id   Int      @id @default(autoincrement())
   tournament_name String
   tournament_mode String   @default("Stroke Play")
-  use_age_option  Boolean  @default(false) 
+  use_age_option  Boolean  @default(false)
   course_id       Int
   event_date      DateTime @db.Date
-  status          String   @default("setup") // รักษา String ไว้ค้ำจุนฟอนต์หน้าบ้านชั่วคราว
-  // 🔍 คอลัมน์เก็บข้อความรายชื่อหลุมลับ Peoria จากฉลากกลางงานเลี้ยงปาร์ตี้
-  peoria_holes    String?
+  status          String   @default("setup")
   created_at      DateTime @default(now())
-  updated_at      DateTime @default(now()) @updatedAt 
-
-  // Relations
-  course          Course   @relation(fields: [course_id], references: [course_id], onDelete: Restrict)
+  updated_at      DateTime @default(now()) @updatedAt
+  peoria_holes    String?
   flights         Flight[]
+  course          Course   @relation(fields: [course_id], references: [course_id])
 
+  @@index([course_id], map: "tournaments_course_id_fkey")
   @@map("tournaments")
 }
 
-// 6. ตารางกลุ่มก๊วนทีออฟ (Flight)
 model Flight {
   flight_id     Int            @id @default(autoincrement())
   tournament_id Int
-  flight_name   String         
-  t_off_time    String?        
+  flight_name   String
+  t_off_time    String?
   created_at    DateTime       @default(now())
   updated_at    DateTime       @default(now()) @updatedAt
-
-  // Relations
-  tournament    Tournament     @relation(fields: [tournament_id], references: [tournament_id], onDelete: Cascade)
   members       FlightMember[]
+  tournament    Tournament     @relation(fields: [tournament_id], references: [tournament_id], onDelete: Cascade)
   scores        Score[]
 
+  @@index([tournament_id], map: "flights_tournament_id_fkey")
   @@map("flights")
 }
 
-// 7. ตารางจับคู่นักกอล์ฟลงก๊วน (Flight Member)
 model FlightMember {
   flight_member_id Int      @id @default(autoincrement())
   flight_id        Int
   user_id          Int
   handicap_claim   Int?
-  // 🎯 สลักแต้มต่อ และแต้มสุทธิที่ประมวลผล Peoria สะเด็ดน้ำลงล็อกตารางถาวร
-  calculated_hd    Float?   @default(0)
-  calculated_net   Float?   @default(0)   
   created_at       DateTime @default(now())
   updated_at       DateTime @default(now()) @updatedAt
-
-  // Relations
+  calculated_hd    Float?   @default(0)
+  calculated_net   Float?   @default(0)
   flight           Flight   @relation(fields: [flight_id], references: [flight_id], onDelete: Cascade)
   user             User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  
-  @@unique([flight_id, user_id]) // 👈 🎯 UK: ป้องกันนักกอล์ฟคนเดิมลงซ้ำก๊วนเดียวกัน
+
+  @@unique([flight_id, user_id])
+  @@index([user_id], map: "flight_members_user_id_fkey")
   @@map("flight_members")
 }
 
-// 8. ตารางบันทึกคะแนนดิบรายหลุมในสนามกอล์ฟ (ฉบับประณีต 3 ประสาน)
 model Score {
   score_id    Int      @id @default(autoincrement())
   flight_id   Int
-  user_id     Int      
-  hole_id     Int      
-  strokes     Int     
+  user_id     Int
+  hole_id     Int
+  strokes     Int
   recorded_at DateTime @default(now())
   updated_at  DateTime @default(now()) @updatedAt
-
-  // Relations (สะพานสายตรงคุยข้ามมิติรวดเร็วแม่นยำ)
   flight      Flight   @relation(fields: [flight_id], references: [flight_id], onDelete: Cascade)
+  hole        Hole     @relation(fields: [hole_id], references: [hole_id])
   user        User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  hole        Hole     @relation(fields: [hole_id], references: [hole_id], onDelete: Restrict)
 
+  @@index([flight_id], map: "scores_flight_id_fkey")
+  @@index([hole_id], map: "scores_hole_id_fkey")
+  @@index([user_id], map: "scores_user_id_fkey")
   @@map("scores")
+}
+
+enum Role {
+  ADMIN
+  TD
+  SCORER
+  GOLFER
 }
